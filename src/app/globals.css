@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+:root {
+  --ms-app-bg: #050505;
+  --ms-panel-bg: #0d0d0d;
+  --ms-card-bg: #141414;
+  --ms-elevated-bg: #1b1b1b;
+  --ms-input-bg: #0a0a0a;
+  --ms-chart-bg: #070707;
+  --ms-plot-bg: #060606;
+  --ms-text-primary: #f7f5f2;
+  --ms-text-secondary: #aaa6a0;
+  --ms-text-tertiary: #6f6b66;
+  --ms-brand: #ffd21e;
+  --ms-brand-hover: #ffe05a;
+  --ms-brand-dim: rgb(255 210 30 / 16%);
+  --ms-brand-ink: #090603;
+  --ms-separator: #292929;
+  --ms-grid: #1c1c1c;
+  --ms-axis: #77736e;
+  --ms-buy: #20c875;
+  --ms-buy-bright: #54df98;
+  --ms-chart-buy: #16b968;
+  --ms-sell: #ef5350;
+  --ms-sell-bright: #ff7a76;
+  --ms-chart-sell: #e5484d;
+  --ms-success: #28c976;
+  --ms-danger: #f05252;
+  --ms-key-gamma: #32aaff;
+  --ms-stats-bg: var(--ms-plot-bg);
+  --ms-stats-gex-neutral: #111925;
+  --ms-stats-gex-positive: #2f7ee8;
+  --ms-stats-gex-negative: #cc6425;
+  --ms-stats-dex-neutral: #0e1b1d;
+  --ms-stats-dex-positive: #0fa4a8;
+  --ms-stats-dex-negative: #b93c78;
+  --ms-stats-chex-neutral: #181524;
+  --ms-stats-chex-positive: #8068d8;
+  --ms-stats-chex-negative: #a77b15;
+  --ms-stats-grid: #2c3442;
+  --ms-stats-label-bg: #0f131b;
+  --ms-stats-text: #f8fafc;
+  --ms-font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  --ms-font-data: "SFMono-Regular", "Roboto Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --font-sans: var(--ms-font-ui);
+  --font-mono: var(--ms-font-data);
+  color: var(--ms-text-primary);
+  background: var(--ms-app-bg);
+  font-family: var(--ms-font-ui);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--ms-app-bg);
+}
+
+body {
+  margin: 0;
+}
+
+button,
+select {
+  border-radius: 0;
+}
+
+button:not(:disabled),
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+::selection {
+  color: var(--ms-brand-ink);
+  background: var(--ms-brand);
+}
+
+.dashboard-grid {
+  background-image:
+    linear-gradient(rgb(28 28 28 / 34%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(28 28 28 / 34%) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+* {
+  scrollbar-color: var(--ms-separator) var(--ms-panel-bg);
+  scrollbar-width: thin;
+}
+
+.ms-panel {
+  overflow: hidden;
+  border: 1px solid var(--ms-separator);
+  border-radius: 12px;
+  background: var(--ms-panel-bg);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 24%);
+}
+
+.ms-control {
+  border: 1px solid var(--ms-separator);
+  border-radius: 10px;
+  background: var(--ms-input-bg);
+}
+
+.ms-control:hover:not(:disabled) {
+  background: var(--ms-elevated-bg);
+}
+
+.ms-control:focus-visible {
+  outline: 2px solid rgb(255 210 30 / 42%);
+  outline-offset: 2px;
+}
+
+.ms-popover {
+  border: 1px solid var(--ms-separator);
+  border-radius: 12px;
+  background: var(--ms-card-bg);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 58%);
+}
+
+.ms-primary {
+  border-color: var(--ms-brand);
+  background: var(--ms-brand);
+  color: var(--ms-brand-ink);
+  font-weight: 700;
+}
+
+.ms-primary:hover:not(:disabled) {
+  background: var(--ms-brand-hover);
+}
+
+.font-mono,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* dockview 主题化（拼装看板，基座 themeDark，变量贴合 --ms-* 暗色体系） */
+.ms-dock {
+  isolation: isolate;
+  z-index: 0;
+  --dv-group-view-background-color: var(--ms-panel-bg);
+  --dv-tabs-and-actions-container-background-color: var(--ms-panel-bg);
+  --dv-tabs-and-actions-container-height: 36px;
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--ms-card-bg);
+  --dv-activegroup-visiblepanel-tab-color: var(--ms-text-primary);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--ms-panel-bg);
+  --dv-activegroup-hiddenpanel-tab-color: var(--ms-text-secondary);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--ms-card-bg);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--ms-text-secondary);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--ms-panel-bg);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--ms-text-tertiary);
+  --dv-separator-border: var(--ms-separator);
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--ms-brand);
+  --dv-drag-over-background-color: rgb(255 210 30 / 12%);
+  --dv-drag-over-border-color: var(--ms-brand);
+  --dv-paneview-active-outline-color: var(--ms-brand);
+  --dv-tab-divider-color: var(--ms-separator);
+  --dv-icon-hover-background-color: var(--ms-elevated-bg);
+  --dv-floating-box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+}
+
+.ms-dock .dv-tab {
+  font-weight: 600;
+}
+
+.ms-dock .dv-tab.dv-active-tab {
+  box-shadow: inset 0 2px 0 var(--ms-brand);
+}
+
+/* 窗格内容区：滚动锁死，滚轮不冒泡到页面 */
+.ms-dock .dv-content-container {
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
