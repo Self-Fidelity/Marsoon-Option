@@ -61,6 +61,13 @@ export interface WindowConfig {
   /** K 线历史窗口：1/3/7 天；offset=0 当前，1 前一日。 */
   historyDays: 1 | 3 | 7;
   historyOffsetDays: number;
+  /** Dockview 重挂载后仍需保留的、会改变数据请求的窗口状态。 */
+  heatmapExpiryMode: "front" | "all";
+  smileSelectedSeries: Record<string, string>;
+  chainExpiration?: number;
+  spreadView: "iv" | "pcr";
+  ivTermAxis: "dte" | "date";
+  ivTermDates: string[];
 }
 
 export interface BoardMaster {
@@ -161,6 +168,12 @@ interface BoardWindowState {
   toggleOptionLayerScope: (id: string, scope: OptionScope) => void;
   setOptionLayerPart: (id: string, part: "levels" | "history", enabled: boolean) => void;
   setHistoryWindow: (id: string, days: 1 | 3 | 7, offsetDays: number) => void;
+  setHeatmapExpiryMode: (id: string, mode: "front" | "all") => void;
+  setSmileSelectedSeries: (id: string, key: string, series: string) => void;
+  setChainExpiration: (id: string, expiration: number | undefined) => void;
+  setSpreadView: (id: string, view: "iv" | "pcr") => void;
+  setIvTermAxis: (id: string, axis: "dte" | "date") => void;
+  setIvTermDates: (id: string, dates: string[]) => void;
   /** 布局还原时整体注入（v3 存档；旧单值自动迁移为数组） */
   hydrate: (payload: {
     master?: BoardMaster | { product: OptionProduct; scope: OptionScope };
@@ -197,6 +210,12 @@ function defaultWindowConfig(state: Pick<BoardWindowState, "master" | "perProduc
     optionHistoryOn: false,
     historyDays: 1,
     historyOffsetDays: 0,
+    heatmapExpiryMode: "front",
+    smileSelectedSeries: {},
+    chainExpiration: undefined,
+    spreadView: "iv",
+    ivTermAxis: "dte",
+    ivTermDates: [],
   };
 }
 
@@ -273,6 +292,16 @@ function sanitizeWindows(
       optionHistoryOn: config.optionHistoryOn === true,
       historyDays: config.historyDays === 3 || config.historyDays === 7 ? config.historyDays : 1,
       historyOffsetDays: typeof config.historyOffsetDays === "number" && Number.isFinite(config.historyOffsetDays) ? Math.max(0, Math.min(30, Math.round(config.historyOffsetDays))) : 0,
+      heatmapExpiryMode: config.heatmapExpiryMode === "all" ? "all" : "front",
+      smileSelectedSeries: config.smileSelectedSeries && typeof config.smileSelectedSeries === "object"
+        ? Object.fromEntries(Object.entries(config.smileSelectedSeries).filter(([key, value]) => key.length <= 80 && typeof value === "string" && value.length <= 160))
+        : {},
+      chainExpiration: typeof config.chainExpiration === "number" && Number.isSafeInteger(config.chainExpiration) && config.chainExpiration > 0 ? config.chainExpiration : undefined,
+      spreadView: config.spreadView === "pcr" ? "pcr" : "iv",
+      ivTermAxis: config.ivTermAxis === "date" ? "date" : "dte",
+      ivTermDates: Array.isArray(config.ivTermDates)
+        ? [...new Set(config.ivTermDates.filter((date) => typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)))].slice(0, 2)
+        : [],
     };
   }
   return out;
@@ -293,7 +322,7 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const state = get();
     const windows = { ...state.windows };
     for (const [id, config] of Object.entries(windows)) {
-      windows[id] = { ...config, product };
+      windows[id] = { ...config, product, chainExpiration: undefined };
     }
     set({ master: { ...state.master, product }, windows });
   },
@@ -320,7 +349,7 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const state = get();
     const config = state.windows[id];
     if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, product } } });
+    set({ windows: { ...state.windows, [id]: { ...config, product, chainExpiration: undefined } } });
   },
 
   toggleProductLinked: (id) => {
@@ -502,6 +531,33 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
   setHistoryWindow: (id, days, offsetDays) => {
     const state = get(), config = state.windows[id]; if (!config) return;
     set({ windows: { ...state.windows, [id]: { ...config, historyDays: days, historyOffsetDays: Math.max(0, Math.min(30, Math.round(offsetDays))) } } });
+  },
+
+  setHeatmapExpiryMode: (id, mode) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, heatmapExpiryMode: mode } } });
+  },
+  setSmileSelectedSeries: (id, key, series) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, smileSelectedSeries: { ...config.smileSelectedSeries, [key]: series } } } });
+  },
+  setChainExpiration: (id, expiration) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    const value = expiration !== undefined && Number.isSafeInteger(expiration) && expiration > 0 ? expiration : undefined;
+    set({ windows: { ...state.windows, [id]: { ...config, chainExpiration: value } } });
+  },
+  setSpreadView: (id, view) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, spreadView: view } } });
+  },
+  setIvTermAxis: (id, axis) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, ivTermAxis: axis } } });
+  },
+  setIvTermDates: (id, dates) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    const valid = [...new Set(dates.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))].slice(0, 2);
+    set({ windows: { ...state.windows, [id]: { ...config, ivTermDates: valid } } });
   },
 
   hydrate: (payload) => {

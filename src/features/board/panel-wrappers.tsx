@@ -4,7 +4,7 @@ import { optionSeriesName } from "@/lib/instrument-labels";
 import { lastCompletedEodAsof } from "@/lib/cme-session";
 import { candleUnderlying, mergeCandlePayload, mergeDashboardCurrent, pickIntradayBars, sameUnderlying } from "./intraday-data";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import type { OptionScope } from "@/api/options";
 import {
@@ -166,7 +166,8 @@ function ExpirationHeatmapView({
 export function ExpirationWindow({ panelId }: { panelId: string }) {
   const config = useWindowConfig(panelId);
   const product = config?.product ?? "NQ";
-  const [expiryMode, setExpiryMode] = useState<HeatmapExpiryMode>("front");
+  const expiryMode = config?.heatmapExpiryMode ?? "front";
+  const setHeatmapExpiryMode = useBoardWindowStore((s) => s.setHeatmapExpiryMode);
   const tradingDay = useCmeTradingDayKey();
   const heatScope = expiryMode === "front" ? "0dte" : "d90";
   const primary = useOptionsDashboard(product, heatScope, { days: expiryMode === "front" ? 1 : 90 });
@@ -186,7 +187,7 @@ export function ExpirationWindow({ panelId }: { panelId: string }) {
         {primary.isPending ? (
           <LoadingState text="加载到期热力图中…" />
         ) : viewModel ? (
-          <ExpirationHeatmapView vm={viewModel} tradingDay={tradingDay} expiryMode={expiryMode} onExpiryModeChange={setExpiryMode} />
+          <ExpirationHeatmapView vm={viewModel} tradingDay={tradingDay} expiryMode={expiryMode} onExpiryModeChange={(mode) => setHeatmapExpiryMode(panelId, mode)} />
         ) : (
           <LoadingState text={primary.data?.missing_reason ?? "当前暂无到期热力图数据"} />
         )}
@@ -217,7 +218,8 @@ export function SmileWindow({ panelId }: { panelId: string }) {
     () => (config ? effectiveLineScopes(config, perProductScope) : ["0dte" as OptionScope]),
     [config, perProductScope],
   );
-  const [selectedSeries, setSelectedSeries] = useState<Record<string, string>>({});
+  const selectedSeries = config?.smileSelectedSeries ?? {};
+  const setSmileSelectedSeries = useBoardWindowStore((s) => s.setSmileSelectedSeries);
   const results = useOptionsChainMulti(product, scopes, selectedSeries);
   const dashboardFallbackEnabled = results.map((result, index) => {
     if (result.isPending) return false;
@@ -249,7 +251,7 @@ export function SmileWindow({ panelId }: { panelId: string }) {
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <WindowToolbar panelId={panelId} kind="line" scopeSelection="multiple" />
       <div className="flex shrink-0 flex-wrap gap-1 px-3 py-1">
-        {scopes.map((scope, i) => results[i]?.data?.series.length ? <select key={scope} aria-label={`${scope}微笑系列`} className="min-w-0 max-w-full bg-[var(--ms-panel-bg)] text-[10px] text-[var(--ms-text-secondary)]" value={selectedSeries[`${product}:${scope}`] ?? results[i]?.data?.chain?.code ?? ""} onChange={(e) => setSelectedSeries((old) => ({...old,[`${product}:${scope}`]:e.target.value}))}>
+        {scopes.map((scope, i) => results[i]?.data?.series.length ? <select key={scope} aria-label={`${scope}微笑系列`} className="min-w-0 max-w-full bg-[var(--ms-panel-bg)] text-[10px] text-[var(--ms-text-secondary)]" value={selectedSeries[`${product}:${scope}`] ?? results[i]?.data?.chain?.code ?? ""} onChange={(e) => setSmileSelectedSeries(panelId, `${product}:${scope}`, e.target.value)}>
           {results[i]?.data?.series.map((serie) => <option key={serie.code} value={serie.code}>{scope} · {optionSeriesName(serie, product)}</option>)}
         </select> : null)}
       </div>
@@ -447,7 +449,7 @@ export function ChainWindow({ panelId }: { panelId: string }) {
       ) : scope === "close" && chainQuery.data?.has_data === false ? (
         <ClosePendingState />
       ) : (
-        <OptionsChainPanel key={`${product}:${scope}`} model={model} />
+        <OptionsChainPanel key={`${product}:${scope}`} panelId={panelId} model={model} />
       )}
     </div>
   );
@@ -455,8 +457,9 @@ export function ChainWindow({ panelId }: { panelId: string }) {
 
 /** 10 月间价差 · PCR（线条类）：多 scope 叠加（第二 scope 起虚线+低透明度）；联动开时跟随总控 */
 export function SpreadWindow({ panelId }: { panelId: string }) {
-  const [view, setView] = useState<"iv" | "pcr">("iv");
   const config = useWindowConfig(panelId);
+  const view = config?.spreadView ?? "iv";
+  const setSpreadView = useBoardWindowStore((s) => s.setSpreadView);
   const perProductScope = useBoardWindowStore((s) => s.perProductScope);
   const product = config?.product ?? "NQ";
   const scopes = useMemo(
@@ -469,10 +472,10 @@ export function SpreadWindow({ panelId }: { panelId: string }) {
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <WindowToolbar panelId={panelId} kind="line" />
       <div className="flex shrink-0 gap-1 border-b border-[var(--ms-separator)] px-2 py-1">
-        {([['iv', 'IV 期限结构'], ['pcr', '价差 / PCR']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={`ms-control h-7 px-2 text-[11px] font-semibold ${view === value ? 'text-[var(--ms-brand)]' : 'text-[var(--ms-text-secondary)]'}`}>{label}</button>)}
+        {([['iv', 'IV 期限结构'], ['pcr', '价差 / PCR']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setSpreadView(panelId, value)} className={`ms-control h-7 px-2 text-[11px] font-semibold ${view === value ? 'text-[var(--ms-brand)]' : 'text-[var(--ms-text-secondary)]'}`}>{label}</button>)}
       </div>
       <div className="min-h-0 flex-1">
-        {view === "iv" ? <IvTermPanel key={`${product}:${scopes[0]}`} product={product} scope={scopes[0] ?? "d90"} /> : <TermSpreadPanel product={product} scopes={scopes} results={results} />}
+        {view === "iv" ? <IvTermPanel key={`${product}:${scopes[0]}`} panelId={panelId} product={product} scope={scopes[0] ?? "d90"} /> : <TermSpreadPanel product={product} scopes={scopes} results={results} />}
       </div>
     </div>
   );

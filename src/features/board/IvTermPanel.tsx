@@ -7,6 +7,7 @@ import { dataAvailabilityMessage } from "@/lib/data-messages";
 import { useMeasureSize } from "./use-measure-size";
 import { ivTermGroups, ivTermPaths, ivTermX, type IvTermAxis } from "./iv-term-model";
 import { clampStrikeViewport, panStrikeViewport, zoomStrikeViewport, type StrikeViewport } from "./overview-viewport";
+import { useBoardWindowStore } from "./board-window-store";
 
 const COLORS = ["var(--ms-brand)", "var(--ms-key-gamma)", "var(--ms-buy-bright)", "var(--ms-sell-bright)", "var(--ms-text-secondary)"];
 const timeFormat = new Intl.DateTimeFormat("zh-CN", { timeZone: "America/Chicago", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -25,9 +26,11 @@ function earlierDate(date: string, days: number) {
 }
 
 /** Every curve is one real futures contract and one observed snapshot. */
-export function IvTermPanel({ product, scope }: { product: OptionProduct; scope: OptionScope }) {
-  const [axis, setAxis] = useState<IvTermAxis>("dte");
-  const [dates, setDates] = useState<string[]>([]);
+export function IvTermPanel({ product, scope, panelId }: { product: OptionProduct; scope: OptionScope; panelId: string }) {
+  const axis = useBoardWindowStore((state) => state.windows[panelId]?.ivTermAxis ?? "dte") as IvTermAxis;
+  const dates = useBoardWindowStore((state) => state.windows[panelId]?.ivTermDates ?? []);
+  const setIvTermAxis = useBoardWindowStore((state) => state.setIvTermAxis);
+  const setIvTermDates = useBoardWindowStore((state) => state.setIvTermDates);
   const [dateInput, setDateInput] = useState("");
   const [hidden, setHidden] = useState<string[]>([]);
   const [viewport, setViewport] = useState<StrikeViewport | null>(null);
@@ -63,7 +66,7 @@ export function IvTermPanel({ product, scope }: { product: OptionProduct; scope:
   const tickCount = Math.max(2, Math.min(6, Math.floor((right - left) / 80)));
   const ticks = Array.from({ length: tickCount }, (_, i) => view.lo + (view.hi - view.lo) * i / (tickCount - 1));
   const sourceDate = results[0]?.data?.snapshot_unix ? calendarDate(results[0].data.snapshot_unix) : calendarDate(Date.now() / 1000);
-  const addDate = (date: string) => { if (date && !dates.includes(date) && dates.length < 2) { setDates((old) => [...old, date]); setDateInput(""); setViewport(null); setHover(null); } };
+  const addDate = (date: string) => { if (date && !dates.includes(date) && dates.length < 2) { setIvTermDates(panelId, [...dates, date]); setDateInput(""); setViewport(null); setHover(null); } };
   const color = (symbol: string) => COLORS[symbols.indexOf(symbol) % COLORS.length]!;
   const current = shown.filter((curve) => curve.index === 0);
   const spreads = current.map((curve) => {
@@ -75,7 +78,7 @@ export function IvTermPanel({ product, scope }: { product: OptionProduct; scope:
   return <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--ms-plot-bg)] p-2" data-iv-term-axis={axis}>
     <div className="flex shrink-0 flex-wrap items-center gap-1.5">
       <div className="ms-control flex p-0.5" aria-label="期限横轴">
-        {([['dte', 'DTE'], ['date', '到期日期']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={axis === value} onClick={() => { setAxis(value); setViewport(null); setHover(null); }} className={`h-7 rounded-[7px] px-2 text-[11px] font-semibold ${axis === value ? "bg-[var(--ms-brand)] text-black" : "text-[var(--ms-text-secondary)]"}`}>{label}</button>)}
+        {([['dte', 'DTE'], ['date', '到期日期']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={axis === value} onClick={() => { setIvTermAxis(panelId, value); setViewport(null); setHover(null); }} className={`h-7 rounded-[7px] px-2 text-[11px] font-semibold ${axis === value ? "bg-[var(--ms-brand)] text-black" : "text-[var(--ms-text-secondary)]"}`}>{label}</button>)}
       </div>
       <button type="button" className={control} disabled={dates.length >= 2} onClick={() => addDate(earlierDate(sourceDate, 1))}>前一日</button>
       <button type="button" className={control} disabled={dates.length >= 2} onClick={() => addDate(earlierDate(sourceDate, 7))}>一周前</button>
@@ -90,7 +93,7 @@ export function IvTermPanel({ product, scope }: { product: OptionProduct; scope:
     <div className="mt-1 flex shrink-0 flex-wrap gap-1 text-[10px]">
       {requests.map((date, i) => <span key={date ?? 'current'} className="flex items-center gap-1 text-[var(--ms-text-tertiary)]">
         {date ?? '当前'}：{results[i]?.isPending ? '加载中…' : results[i]?.isError ? '读取失败' : results[i]?.data?.has_data ? `${timeFormat.format(new Date(results[i].data!.snapshot_unix * 1000))} CT` : dataAvailabilityMessage(results[i]?.data?.missing_reason, '无数据')}
-        {date ? <button className="px-1 text-[var(--ms-text-secondary)]" aria-label={`删除${date}对比`} onClick={() => { setDates((old) => old.filter((d) => d !== date)); setHover(null); }}>×</button> : null}
+        {date ? <button className="px-1 text-[var(--ms-text-secondary)]" aria-label={`删除${date}对比`} onClick={() => { setIvTermDates(panelId, dates.filter((d) => d !== date)); setHover(null); }}>×</button> : null}
       </span>)}
     </div>
     <div ref={plotRef} className="relative mt-1 min-h-0 flex-1 overflow-hidden">

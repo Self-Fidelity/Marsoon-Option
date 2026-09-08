@@ -96,3 +96,25 @@ test('volatility scopes support an isolated four-way overlay and never become em
   for (const scope of ['d90', 'close', '0dte']) store.getState().toggleLineScopeMulti('volatility', scope);
   assert.deepEqual(effectiveLineScopes(store.getState().windows.volatility, store.getState().perProductScope), ['0dte']);
 });
+
+test('query-driving widget controls survive dock remounts without changing sibling windows', () => {
+  const { useBoardWindowStore: store } = loadModule('../src/features/board/board-window-store.ts');
+  for (const id of ['expiration', 'volatility', 'chain', 'spread', 'intraday']) store.getState().ensureWindow(id);
+  const intraday = store.getState().windows.intraday;
+  store.getState().setHeatmapExpiryMode('expiration', 'all');
+  store.getState().setSmileSelectedSeries('volatility', 'NQ:0dte', 'series-a');
+  store.getState().setChainExpiration('chain', 1790000000);
+  store.getState().setSpreadView('spread', 'pcr');
+  store.getState().setIvTermAxis('spread', 'date');
+  store.getState().setIvTermDates('spread', ['2026-09-05', 'bad-date', '2026-09-04']);
+  const saved = store.getState();
+  store.getState().hydrate({ master: saved.master, perProductScope: saved.perProductScope, windows: saved.windows });
+  const restored = store.getState().windows;
+  assert.equal(restored.expiration.heatmapExpiryMode, 'all');
+  assert.equal(restored.volatility.smileSelectedSeries['NQ:0dte'], 'series-a');
+  assert.equal(restored.chain.chainExpiration, 1790000000);
+  assert.equal(restored.spread.spreadView, 'pcr');
+  assert.equal(restored.spread.ivTermAxis, 'date');
+  assert.deepEqual(restored.spread.ivTermDates, ['2026-09-05', '2026-09-04']);
+  assert.deepEqual({ ...restored.intraday, vpW: undefined }, { ...intraday, vpW: undefined });
+});

@@ -16,6 +16,7 @@ import {
 } from "@/lib/formatters";
 
 import { liveFocus, useBoardFocusStore } from "./board-focus-store";
+import { useBoardWindowStore } from "./board-window-store";
 import {
   buildChainMarks,
   CHAIN_SORT_TABS,
@@ -385,11 +386,12 @@ function SideDetail({
  * 09 期权链下钻：Strike 居中镜像表（左 Call 绿 / 右 Put 红），行点击摊开明细。
  * 到期切换独立于 board scope：组件内 useState，初始为空 = 后端选最小 DTE。
  */
-export function OptionsChainPanel({ model }: { model: OptionsChainModel }) {
+export function OptionsChainPanel({ model, panelId }: { model: OptionsChainModel; panelId: string }) {
   const { product, tickSize } = model;
   const scope = model.scope ?? "0dte";
   const settlement = scope === "close";
-  const [expiration, setExpiration] = useState<number | undefined>(undefined);
+  const expiration = useBoardWindowStore((state) => state.windows[panelId]?.chainExpiration);
+  const setChainExpiration = useBoardWindowStore((state) => state.setChainExpiration);
   const [sort, setSort] = useState<ChainSortKey>("strike");
   const [showAll, setShowAll] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
@@ -422,12 +424,12 @@ export function OptionsChainPanel({ model }: { model: OptionsChainModel }) {
     focusHandledAtRef.current = live.at;
     const serie = displayData?.series.find((item) => item.expiration === live.expiry);
     if (!serie) return;
-    setExpiration(serie.expiration);
+    setChainExpiration(panelId, serie.expiration);
     setSelectedStrike(null);
     setFlashExpiry(serie.expiration);
     const timer = setTimeout(() => setFlashExpiry(null), 2000);
     return () => clearTimeout(timer);
-  }, [focus, displayData]);
+  }, [focus, displayData, panelId, setChainExpiration]);
 
   const rowsAsc = useMemo(
     () => [...(displayData?.chain?.rows ?? [])].sort((a, b) => a.strike - b.strike),
@@ -590,7 +592,7 @@ export function OptionsChainPanel({ model }: { model: OptionsChainModel }) {
               type="button"
               aria-pressed={on}
               onClick={() => {
-                setExpiration(serie.expiration);
+                setChainExpiration(panelId, serie.expiration);
                 setSelectedStrike(null);
               }}
               className={`shrink-0 rounded-[9px] border px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors ${
