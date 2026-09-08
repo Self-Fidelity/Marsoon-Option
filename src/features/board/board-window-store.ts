@@ -70,7 +70,7 @@ export interface BoardMaster {
 }
 
 const PRODUCTS: OptionProduct[] = ["ES", "NQ", "GC"];
-const LINE_SCOPES_MAX = 1;
+const WINDOW_SCOPES_MAX = 4;
 
 const VALID_SCOPES: OptionScope[] = ["close", "0dte", "d30", "d90"];
 
@@ -140,6 +140,8 @@ interface BoardWindowState {
   setWindowScope: (id: string, scope: OptionScope) => void;
   /** 线条类周期切换：始终只保留目标 scope */
   toggleLineScope: (id: string, scope: OptionScope) => void;
+  /** 波动率等叠加型窗口：复选 scope，至少保留一项 */
+  toggleLineScopeMulti: (id: string, scope: OptionScope) => void;
   setKPeriod: (id: string, minutes: number) => void;
   setVpEnabled: (id: string, enabled: boolean) => void;
   setVpVisible: (id: string, visible: boolean) => void;
@@ -174,7 +176,7 @@ function defaultWindowConfig(state: Pick<BoardWindowState, "master" | "perProduc
   return {
     product: state.master.product,
     productLinked: true,
-    scopes: scopes.slice(0, LINE_SCOPES_MAX),
+    scopes: scopes.slice(0, 1),
     scope: scopes[0] ?? "0dte",
     kPeriod: 5,
     vpOn: true,
@@ -190,7 +192,7 @@ function defaultWindowConfig(state: Pick<BoardWindowState, "master" | "perProduc
     volumeIndicatorVisible: true,
     optionLayerEnabled: true,
     optionLayerVisible: true,
-    optionLayerScopes: scopes.slice(0, LINE_SCOPES_MAX),
+    optionLayerScopes: scopes.slice(0, 1),
     optionLevelsOn: true,
     optionHistoryOn: false,
     historyDays: 1,
@@ -224,7 +226,7 @@ export function effectiveLineScopes(
       return sortLineScopes(linked).slice(0, 1);
     }
   }
-  return config.scopes.slice(0, 1);
+  return config.scopes.slice(0, WINDOW_SCOPES_MAX);
 }
 
 function sanitizeWindows(
@@ -235,7 +237,7 @@ function sanitizeWindows(
   for (const [id, config] of Object.entries(windows)) {
     if (!config || !PRODUCTS.includes(config.product)) continue;
     const fallback = perProductScope[config.product]?.[0] ?? "0dte";
-    const scopes = sanitizeScopeArray(config.scopes, [fallback]).slice(0, LINE_SCOPES_MAX);
+    const scopes = sanitizeLevelScopeArray(config.scopes, [fallback]).slice(0, WINDOW_SCOPES_MAX);
     const legacyScope = (config as unknown as { scope: string }).scope;
     const normalizedScope = (legacyScope === "all" ? "d90" : legacyScope) as OptionScope;
     const scope = VALID_SCOPES.includes(normalizedScope) ? normalizedScope : fallback;
@@ -331,7 +333,7 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
       const scope = linkedScopes?.[0] ?? config.scope;
       const scopes =
         linkedScopes && linkedScopes.length > 0
-          ? sortLineScopes(linkedScopes).slice(0, LINE_SCOPES_MAX)
+          ? sortLineScopes(linkedScopes).slice(0, 1)
           : config.scopes;
       set({
         windows: { ...state.windows, [id]: { ...config, productLinked: false, scope, scopes } },
@@ -361,6 +363,23 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
       windows: {
         ...state.windows,
         [id]: { ...config, productLinked: false, scope, scopes: sorted },
+      },
+    });
+  },
+
+  toggleLineScopeMulti: (id, scope) => {
+    const state = get();
+    const config = state.windows[id];
+    if (!config) return;
+    const linked = state.perProductScope[config.product];
+    const current = config.productLinked && linked?.length ? linked : config.scopes;
+    const next = current.includes(scope)
+      ? current.length === 1 ? current : current.filter((item) => item !== scope)
+      : sortLineScopes([...current, scope]).slice(0, WINDOW_SCOPES_MAX);
+    set({
+      windows: {
+        ...state.windows,
+        [id]: { ...config, productLinked: false, scope: next[0] ?? scope, scopes: next },
       },
     });
   },

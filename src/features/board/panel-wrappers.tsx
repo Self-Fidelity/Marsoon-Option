@@ -247,7 +247,7 @@ export function SmileWindow({ panelId }: { panelId: string }) {
   // 真自适应（面板自适应规范）：flex 高度链 + overflow-hidden，07 精确填满窗口不出滚动条
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <WindowToolbar panelId={panelId} kind="line" />
+      <WindowToolbar panelId={panelId} kind="line" scopeSelection="multiple" />
       <div className="flex shrink-0 flex-wrap gap-1 px-3 py-1">
         {scopes.map((scope, i) => results[i]?.data?.series.length ? <select key={scope} aria-label={`${scope}微笑系列`} className="min-w-0 max-w-full bg-[var(--ms-panel-bg)] text-[10px] text-[var(--ms-text-secondary)]" value={selectedSeries[`${product}:${scope}`] ?? results[i]?.data?.chain?.code ?? ""} onChange={(e) => setSelectedSeries((old) => ({...old,[`${product}:${scope}`]:e.target.value}))}>
           {results[i]?.data?.series.map((serie) => <option key={serie.code} value={serie.code}>{scope} · {optionSeriesName(serie, product)}</option>)}

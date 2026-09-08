@@ -28,11 +28,13 @@ export function WindowToolbar({
   panelId,
   kind,
   showScopes = true,
+  scopeSelection = "single",
   trailing,
 }: {
   panelId: string;
   kind: WindowToolbarKind;
   showScopes?: boolean;
+  scopeSelection?: "single" | "multiple";
   trailing?: ReactNode;
 }) {
   return (
@@ -40,7 +42,7 @@ export function WindowToolbar({
       data-panel-id={panelId}
       className="sticky top-0 z-20 flex min-h-10 flex-wrap items-center gap-1.5 border-b border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-2.5 py-1.5"
     >
-      <WindowToolbarControls panelId={panelId} kind={kind} showScopes={showScopes} />
+      <WindowToolbarControls panelId={panelId} kind={kind} showScopes={showScopes} scopeSelection={scopeSelection} />
       {trailing ? <div className="ml-auto flex items-center">{trailing}</div> : null}
     </div>
   );
@@ -54,16 +56,19 @@ export function WindowToolbarControls({
   panelId,
   kind,
   showScopes = true,
+  scopeSelection = "single",
 }: {
   panelId: string;
   kind: WindowToolbarKind;
   showScopes?: boolean;
+  scopeSelection?: "single" | "multiple";
 }) {
   const config = useBoardWindowStore((s) => s.windows[panelId]);
   const perProductScope = useBoardWindowStore((s) => s.perProductScope);
   const setWindowProduct = useBoardWindowStore((s) => s.setWindowProduct);
   const setWindowScope = useBoardWindowStore((s) => s.setWindowScope);
   const toggleLineScope = useBoardWindowStore((s) => s.toggleLineScope);
+  const toggleLineScopeMulti = useBoardWindowStore((s) => s.toggleLineScopeMulti);
 
   if (!config) return null;
   const tableScope = effectiveTableScope(config, perProductScope);
@@ -86,7 +91,7 @@ export function WindowToolbarControls({
       </select>
 
       {kind === "chain" || !showScopes ? null : (
-        <div className="ms-control flex p-0.5" aria-label="期权周期">
+        <div className="ms-control flex p-0.5" aria-label={scopeSelection === "multiple" ? "期权周期（可叠加）" : "期权周期"}>
           {SCOPE_CHIPS.map((chip) => {
             const active =
               kind === "line" ? lineScopes.includes(chip.value) : tableScope === chip.value;
@@ -96,7 +101,11 @@ export function WindowToolbarControls({
                 type="button"
                 aria-pressed={active}
                 onClick={() =>
-                  kind === "line" ? toggleLineScope(panelId, chip.value) : setWindowScope(panelId, chip.value)
+                  kind === "line"
+                    ? scopeSelection === "multiple"
+                      ? toggleLineScopeMulti(panelId, chip.value)
+                      : toggleLineScope(panelId, chip.value)
+                    : setWindowScope(panelId, chip.value)
                 }
                 title={chip.title}
                 className={`h-[18px] px-1 font-mono text-[10px] transition-colors ${

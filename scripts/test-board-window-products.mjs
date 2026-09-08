@@ -83,3 +83,16 @@ test('widget scope changes update only that widget and leave the master query st
   assert.equal(afterTable.windows.gex.productLinked, false);
   assert.equal(effectiveTableScope(afterTable.windows.gex, afterTable.perProductScope), 'd90');
 });
+
+test('volatility scopes support an isolated four-way overlay and never become empty', () => {
+  const { useBoardWindowStore: store, effectiveLineScopes } = loadModule('../src/features/board/board-window-store.ts');
+  store.getState().ensureWindow('volatility');
+  const master = store.getState().master;
+  for (const scope of ['d30', 'd90', 'close']) store.getState().toggleLineScopeMulti('volatility', scope);
+  assert.deepEqual(effectiveLineScopes(store.getState().windows.volatility, store.getState().perProductScope), ['0dte', 'd30', 'd90', 'close']);
+  assert.equal(store.getState().master, master);
+  store.getState().toggleLineScopeMulti('volatility', 'd30');
+  assert.deepEqual(effectiveLineScopes(store.getState().windows.volatility, store.getState().perProductScope), ['0dte', 'd90', 'close']);
+  for (const scope of ['d90', 'close', '0dte']) store.getState().toggleLineScopeMulti('volatility', scope);
+  assert.deepEqual(effectiveLineScopes(store.getState().windows.volatility, store.getState().perProductScope), ['0dte']);
+});
