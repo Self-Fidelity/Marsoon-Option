@@ -37,7 +37,7 @@ export class OptionVolumeHeatmapPrimitive implements ISeriesPrimitive<Time> {
       if (baseX === null) return null;
       const nextX = timeScale.timeToCoordinate((base + chartSpan) as UTCTimestamp);
       const slot = nextX === null ? barSpacing : nextX - baseX;
-      return { x: baseX + (unix - base) / chartSpan * slot, width: Math.max(1, Math.abs(slot) * heatSpan / chartSpan) };
+      return { x: baseX + (unix - base) / chartSpan * slot, width: Math.max(2, Math.abs(slot) * heatSpan / chartSpan) };
     };
     const model = this.model;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
@@ -56,7 +56,7 @@ export class OptionVolumeHeatmapPrimitive implements ISeriesPrimitive<Time> {
             : model.metric === "call" || value > 0
               ? this.colors.buy
               : this.colors.sell;
-        const height = profileBinHeight(cell.strike, this.tickSize, (price) => series.priceToCoordinate(price));
+        const height = Math.max(2, profileBinHeight(cell.strike, this.tickSize, (price) => series.priceToCoordinate(price)));
         ctx.fillRect(time.x - time.width / 2, y - height / 2, time.width, height);
       }
       ctx.restore();
