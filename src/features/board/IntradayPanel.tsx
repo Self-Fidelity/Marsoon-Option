@@ -92,11 +92,15 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   const aligned = useMemo(() => segments.filter((s) => sameUnderlying(s.data?.underlying_symbol, symbol)), [segments, symbol]);
   const layerSegments = useMemo(() => aligned.filter((segment) => layerScopes.includes(segment.scope)), [aligned, layerScopes]);
   const bars = useMemo(() => aggregateIntradayBars(source?.bars ?? [], minutes), [source?.bars, minutes]);
+  const latestPrice = bars.at(-1)?.close;
   const selectedStatsMetrics = useMemo(() => sanitizeOptionStatsMetrics(optionStatsMetrics), [optionStatsMetrics]);
   const optionStatsModel = useMemo(() => buildOptionStatsModel(optionStatsResponse, bars), [optionStatsResponse, bars]);
   const statsPaneVisible = optionStatsEnabled && optionStatsVisible;
   const levelsLayerVisible = levelLayerEnabled && levelLayerVisible;
-  const positions = useMemo(() => levelsLayerVisible && levelsOn ? buildChartPositions(layerSegments, primary, symbol) : [], [levelsLayerVisible, levelsOn, layerSegments, primary, symbol]);
+  const positions = useMemo(
+    () => levelsLayerVisible && levelsOn ? buildChartPositions(layerSegments, primary, symbol, latestPrice) : [],
+    [levelsLayerVisible, levelsOn, layerSegments, primary, symbol, latestPrice],
+  );
   const tick = optionProductConfig[product].tickSize;
   const profileWidth = Math.max(120, Math.min(400, vpW ?? 200));
   const profileVisible = vpOn && gexProfileVisible && !!vpModel?.rows.length;

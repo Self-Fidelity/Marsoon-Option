@@ -16,8 +16,9 @@ test('invalid candles never reach the chart engine',()=>{
 });
 test('positions are from the exact underlying, keep missing values empty and merge equal scopes',()=>{
  const data={underlying_symbol:'NQU6',current:{call_wall:105,put_wall:null,gamma_flip:101,spot:102}};
- const out=buildChartPositions([{scope:'0dte',data},{scope:'d30',data:{...data,current:{call_wall:105,put_wall:0,gamma_flip:null,spot:102}}},{scope:'all',data:{...data,underlying_symbol:'NQZ6'}}],'0dte','NQU6');
+ const out=buildChartPositions([{scope:'0dte',data},{scope:'d30',data:{...data,current:{call_wall:105,put_wall:0,gamma_flip:null,spot:102}}},{scope:'all',data:{...data,underlying_symbol:'NQZ6'}}],'0dte','NQU6',103);
  assert.deepEqual(out.find(p=>p.kind==='CW').scopes,['0dte','d30']);assert.equal(out.some(p=>p.kind==='PW'),false);assert.equal(out.some(p=>p.scopes.includes('all')),false);
+ assert.equal(out.find(p=>p.kind==='SPOT').price,103);
 });
 test('historical positions are not moved backwards to the start of an earlier bar',()=>{
  const out=historicalPositionData([bar(t),bar(t+300),bar(t+600)],[{t:t+60,call_wall:110},{t:t+300,call_wall:112},{t:t+600,call_wall:null}],'call_wall');

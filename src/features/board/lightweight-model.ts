@@ -30,14 +30,19 @@ export function aggregateIntradayBars(input: readonly IntradayBar[], minutes: nu
   }
   return result;
 }
-export function buildChartPositions(segments: IntradaySegment[], primary: OptionScope, symbol?: string): ChartPosition[] {
+export function buildChartPositions(segments: IntradaySegment[], primary: OptionScope, symbol?: string, latestPrice?: number): ChartPosition[] {
   const positions: ChartPosition[] = [];
   for (const scope of INTRADAY_SCOPES) {
     const data = segments.find((s) => s.scope === scope)?.data;
     if (!data?.current) continue;
     if (symbol && data.underlying_symbol && data.underlying_symbol.toUpperCase() !== symbol.toUpperCase() && data.candle_underlying_symbol && data.candle_underlying_symbol.toUpperCase() !== symbol.toUpperCase()) continue;
     const fields: Array<{ kind: PositionKind; price: number | null }> = POSITION_FIELDS.map((f) => ({ kind: f.kind, price: data.current![f.field] }));
-    if (scope === primary) fields.push({ kind: "SPOT", price: data.current.spot });
+    if (scope === primary) fields.push({
+      kind: "SPOT",
+      price: latestPrice != null && Number.isFinite(latestPrice) && latestPrice > 0
+        ? latestPrice
+        : data.current.spot,
+    });
     for (const { kind, price } of fields) {
       if (price == null || !Number.isFinite(price) || price <= 0) continue;
       const match = positions.find((p) => p.kind === kind && p.price === price);
