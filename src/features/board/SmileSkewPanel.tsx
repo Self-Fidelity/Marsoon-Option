@@ -13,7 +13,6 @@ import { useMeasureSize } from "./use-measure-size";
 const FALLBACK_W = 880;
 const FALLBACK_H = 320;
 const PAD_L = 52;
-const PAD_R = 20;
 const PAD_T = 16;
 const PAD_B = 34;
 
@@ -63,6 +62,27 @@ const SCOPE_LINE_STYLE: Record<OptionScope, { dash?: string; name: string }> = {
   close: { dash: "10 3 2 3", name: "点划线" },
 };
 
+const SCOPE_END_LABEL: Record<OptionScope, string> = {
+  close: "EOD",
+  "0dte": "0DTE",
+  d30: "30DTE",
+  d90: "90DTE",
+};
+
+function distributeLabelY<T extends { y: number }>(items: T[], top: number, bottom: number, gap = 12): Array<T & { labelY: number }> {
+  const sorted = items.map((item) => ({ ...item, labelY: item.y })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < sorted.length; i++) sorted[i]!.labelY = Math.max(sorted[i]!.labelY, sorted[i - 1]!.labelY + gap);
+  if (sorted.at(-1)?.labelY! > bottom) {
+    sorted[sorted.length - 1]!.labelY = bottom;
+    for (let i = sorted.length - 2; i >= 0; i--) sorted[i]!.labelY = Math.min(sorted[i]!.labelY, sorted[i + 1]!.labelY - gap);
+  }
+  if (sorted[0]?.labelY! < top) {
+    sorted[0]!.labelY = top;
+    for (let i = 1; i < sorted.length; i++) sorted[i]!.labelY = Math.max(sorted[i]!.labelY, sorted[i - 1]!.labelY + gap);
+  }
+  return sorted;
+}
+
 export interface SmileScopeModel {
   scope: OptionScope;
   /** null = 该 scope 空态（close 待接入 / has_data:false），静默跳过、图例灰显 */
@@ -82,6 +102,8 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
   const [plotRef, { width: measuredW, height: measuredH }] = useMeasureSize<HTMLDivElement>();
   const WIDTH = measuredW > 0 ? measuredW : FALLBACK_W;
   const HEIGHT = measuredH > 0 ? measuredH : FALLBACK_H;
+  const labelGutter = WIDTH < 520 ? 66 : 98;
+  const plotRight = Math.max(PAD_L + 1, WIDTH - labelGutter);
   const segments = models.map((entry, i) => ({ ...entry, primary: i === 0 }));
   const withData = segments.filter(
     (s) => s.model !== null && s.model.points.length >= 2,
@@ -122,11 +144,11 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
   const hi = maxIv + pad;
 
   const x = (index: number) =>
-    PAD_L + (index / Math.max(1, strikes.length - 1)) * (WIDTH - PAD_L - PAD_R);
+    PAD_L + (index / Math.max(1, strikes.length - 1)) * (plotRight - PAD_L);
   const widestStrikeLabel = Math.max(...strikes.map((strike) => formatPrice(strike, tickSize).length));
   const xLabelIndices = new Set(adaptiveLabelIndices(
     strikes.length,
-    WIDTH - PAD_L - PAD_R,
+    plotRight - PAD_L,
     Math.max(48, widestStrikeLabel * 5.5 + 12),
   ));
   const y = (value: number) =>
@@ -139,7 +161,7 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
       ? undefined
       : PAD_L +
         Math.min(1, Math.max(0, (primary.model.spot - minK) / (maxK - minK))) *
-          (WIDTH - PAD_L - PAD_R);
+          (plotRight - PAD_L);
 
   // ATM 点（主 scope）：最接近现货的执行价，取两侧 IV 均值
   let atmIndex = -1;
@@ -160,6 +182,22 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
       : (atmPoint?.callIV ?? atmPoint?.putIV);
 
   const gridTicks = Array.from({ length: 4 }, (_, i) => lo + ((i + 1) / 5) * (hi - lo));
+  const endpointLabels = distributeLabelY(curves.flatMap((curve) => {
+    const endpoint = (side: "call" | "put") => {
+      for (let index = strikes.length - 1; index >= 0; index--) {
+        const value = curve.byStrike.get(strikes[index]!)?.[side === "call" ? "callIV" : "putIV"];
+        if (value !== undefined) return {
+          key: `${curve.scope}-${side}`,
+          x: x(index),
+          y: y(value),
+          color: side === "call" ? "var(--ms-chart-buy)" : "var(--ms-chart-sell)",
+          text: `${SCOPE_END_LABEL[curve.scope]} ${WIDTH < 520 ? side === "call" ? "C" : "P" : side.toUpperCase()}`,
+        };
+      }
+      return null;
+    };
+    return [endpoint("call"), endpoint("put")].filter((item): item is NonNullable<typeof item> => item !== null);
+  }), PAD_T + 5, HEIGHT - PAD_B - 5);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--ms-plot-bg)] px-3 py-4">
@@ -179,7 +217,7 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
         {gridTicks.map((tick) => (
           <g key={tick}>
             <line
-              x1={PAD_L} y1={y(tick)} x2={WIDTH - PAD_R} y2={y(tick)}
+              x1={PAD_L} y1={y(tick)} x2={plotRight} y2={y(tick)}
               stroke="var(--ms-grid)" strokeWidth={1}
             />
             <text
@@ -195,11 +233,11 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
         {primary.model.atmIV !== undefined && primary.model.atmIV > lo && primary.model.atmIV < hi ? (
           <g>
             <line
-              x1={PAD_L} y1={y(primary.model.atmIV)} x2={WIDTH - PAD_R} y2={y(primary.model.atmIV)}
+              x1={PAD_L} y1={y(primary.model.atmIV)} x2={plotRight} y2={y(primary.model.atmIV)}
               stroke="var(--ms-text-tertiary)" strokeWidth={1} strokeDasharray="6 5" opacity={0.7}
             />
             <text
-              x={WIDTH - PAD_R} y={y(primary.model.atmIV) - 4} textAnchor="end"
+              x={plotRight} y={y(primary.model.atmIV) - 4} textAnchor="end"
               fontSize={9} fill="var(--ms-text-tertiary)" fontFamily="monospace" letterSpacing={1}
             >
               ATM {formatPercent(primary.model.atmIV)}
@@ -247,6 +285,20 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
             </g>
           );
         })}
+
+        {/* 曲线右端周期标签：颜色识别 Call/Put，文字直接识别 scope；拥挤时自动错位。 */}
+        {endpointLabels.map((label) => (
+          <g key={label.key}>
+            <line x1={label.x} y1={label.y} x2={plotRight + 5} y2={label.labelY} stroke={label.color} strokeWidth={1} opacity={0.72} />
+            <text
+              x={plotRight + 8} y={label.labelY + 3}
+              fontSize={9} fontWeight={600} fill={label.color} fontFamily="monospace"
+              stroke="var(--ms-plot-bg)" strokeWidth={3} paintOrder="stroke" strokeLinejoin="round"
+            >
+              {label.text}
+            </text>
+          </g>
+        ))}
 
         {/* 端点圆点（主 scope）：左翼 PUT / 右翼 CALL */}
         {primaryByStrike.get(strikes[0]!)?.putIV !== undefined ? (
