@@ -3,6 +3,7 @@ import { sanitizeDataCopy, sanitizePublicData } from "@/lib/data-messages";
 import { allowedStatusEntry, bindOptionQuery, checkBoundResponse, fixedOptionUnderlying } from "./option-underlying";
 import { attachAvailableCandles, sessionStart } from "./intraday-candles";
 import { isCurrentPreviousEod } from "./eod-freshness";
+import { backendOptionScope, defaultDashboardDays } from "./option-scope-routing";
 import type { OptionsChainResponse, OptionsDashboardResponse, OptionsIntradayResponse } from "@/api/options";
 import type { OptionProduct, OptionScope } from "@/api/options";
 import { composeChainFromDashboard } from "./chain-from-dashboard";
@@ -83,7 +84,7 @@ export async function resolvedUnderlying(product: OptionProduct) {
 async function latestStatusUnix(product: OptionProduct, scope: OptionScope, allowNearestFallback = true) {
   try {
     const status = object(await upstream("/options/status"));
-    const backend = scope === "d30" || scope === "d90" ? "all" : scope;
+    const backend = backendOptionScope(scope);
     const entries = list(status.entries).filter((entry) => entry.product === product);
     const candidates = backend === "0dte" && allowNearestFallback ? ["0dte", "nearest"] : [backend];
     for (const candidate of candidates) {
@@ -103,18 +104,14 @@ async function readLevels(product: OptionProduct, scope: OptionScope, from?: num
   const raw = object(await upstream("/options/levels", { product, scope, from: from ?? end - 3600, to: end, timeframe }));
   return { states: list(raw.states ?? []) as LevelPage["states"], levels: list(raw.levels ?? []) as unknown as LevelPage["levels"] };
 }
-function backendDashboardScope(scope: OptionScope): string {
-  return scope === "d30" || scope === "d90" ? "all" : scope;
-}
-
 export async function dashboard(product: OptionProduct, scope: OptionScope, requestedDays?: number, asof?: number) {
-  const days = requestedDays ?? (scope === "d90" ? 90 : scope === "d30" ? 30 : scope === "0dte" ? 1 : 45);
+  const days = requestedDays ?? defaultDashboardDays(scope);
   const underlying = await resolvedUnderlying(product);
   if (unifiedAPI()) {
     const readDashboard = async (asofUnix?: number) => {
       const raw = object(await upstream("/options/dashboard", {
         product,
-        scope: backendDashboardScope(scope),
+        scope: backendOptionScope(scope),
         days,
         window_pct: .12,
         current: "true",
@@ -417,7 +414,7 @@ export async function term(request: Request) {
     missing_reason: "当前暂无期限结构数据",
   };
   if (scope === "close") return { ...empty, missing_reason: "暂无完整的收盘数据" };
-  const data = object(await unavailableEndpoint("/options/term", { product, scope: backendDashboardScope(scope) }, empty));
+  const data = object(await unavailableEndpoint("/options/term", { product, scope: backendOptionScope(scope) }, empty));
   const expiryPoints = list(data.expiry_points ?? []);
   const hasIv = expiryPoints.some((point) => number(point.iv_official) != null || number(point.pcr_oi) != null || number(point.pcr_vol) != null);
   if (hasIv) return { ...data, product, scope };
