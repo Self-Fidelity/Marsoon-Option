@@ -8,7 +8,7 @@ export class OptionOiProfilePrimitive implements ISeriesPrimitive<Time> {
   private rows: GammaRow[] = [];
   private width = 110;
   private tickSize = 1;
-  private colors = { background: "", buy: "", sell: "", text: "", border: "" };
+  private colors = { buy: "", sell: "", text: "", border: "" };
   private views: IPrimitivePaneView[] = [{ zOrder: () => "top", renderer: () => ({ draw: (target) => this.draw(target) }) }];
   attached(parameters: SeriesAttachedParameter<Time>) { this.attachedTo = parameters; }
   detached() { this.attachedTo = undefined; }
@@ -29,8 +29,7 @@ export class OptionOiProfilePrimitive implements ISeriesPrimitive<Time> {
         return y === null || y < 18 || y > mediaSize.height ? [] : [{ row, y }];
       }).sort((a, b) => a.y - b.y);
       const visibleMax = Math.max(1, ...visible.flatMap(({ row }) => [row.callOI, row.putOI]));
-      ctx.save(); ctx.globalAlpha = .94; ctx.fillStyle = this.colors.background;
-      ctx.fillRect(x, 0, width, mediaSize.height); ctx.globalAlpha = 1;
+      ctx.save(); ctx.globalAlpha = 1;
       ctx.fillStyle = this.colors.border; ctx.fillRect(center, 18, 1, mediaSize.height - 18);
       ctx.font = "10px sans-serif"; ctx.fillStyle = this.colors.text; ctx.textAlign = "center"; ctx.fillText("OPT OI", center, 12);
       for (let i = 0; i < visible.length; i++) {
