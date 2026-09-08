@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const PRIVACY_TEXT = "我们非常重视您的隐私保护。当您使用我们的服务时，我们会收集和使用您的相关信息。我们将按照法律法规要求，采取相应安全保护措施，尽力保护您的个人信息安全可控。";
@@ -21,7 +21,6 @@ async function responseMessage(response: Response, fallback: string) {
 }
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const destination = useMemo(() => safeNext(searchParams.get("next")), [searchParams]);
   const [checking, setChecking] = useState(true);
@@ -41,14 +40,13 @@ export function LoginForm() {
     void fetch("/api/auth/session", { cache: "no-store", credentials: "include" }).then((response) => {
       if (cancelled) return;
       if (response.ok) {
-        router.replace(destination);
-        router.refresh();
+        window.location.replace(destination);
       } else {
         setChecking(false);
       }
     }).catch(() => { if (!cancelled) setChecking(false); });
     return () => { cancelled = true; };
-  }, [destination, router]);
+  }, [destination]);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -78,8 +76,7 @@ export function LoginForm() {
     try {
       const response = await fetch("/api/auth/verify", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim(), code: code.trim() }) });
       if (!response.ok) throw new Error(await responseMessage(response, "验证码错误或已过期"));
-      router.replace(destination);
-      router.refresh();
+      window.location.replace(destination);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "登录失败");
     } finally {
