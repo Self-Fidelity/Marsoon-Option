@@ -108,17 +108,8 @@ export function saveLayout(api: DockviewApi) {
 export function applyPayload(api: DockviewApi, payload: BoardDockPayload): boolean {
   try {
     if (payload.version !== STORAGE_VERSION || !payload.layout) return false;
-    api.fromJSON(payload.layout);
-    // 注册表演进后存档里可能残留未知面板类型：整档作废，避免半残布局
-    const unknown = api.panels.some(
-      (panel) => !BOARD_PANELS.some((def) => def.key === (panel.params as { panelKey?: string })?.panelKey),
-    );
-    if (unknown) {
-      api.clear();
-      return false;
-    }
-    // 窗口配置注入 store（sanitize + 旧单值存档→数组迁移在 hydrate 内做），
-    // 面板渲染时 ensureWindow 兜底缺项
+    // 配置必须先于 Dockview 面板挂载注入。否则组件会先按 fallback 发起错误
+    // product/scope 请求，随后因 hydrate 重挂载并取消，再重新请求保存的参数。
     useBoardWindowStore.getState().hydrate({
       master: payload.master,
       perProductScope: payload.perProductScope as
@@ -126,6 +117,17 @@ export function applyPayload(api: DockviewApi, payload: BoardDockPayload): boole
         | undefined,
       windows: payload.windows ?? {},
     });
+    api.fromJSON(payload.layout);
+    // 注册表演进后存档里可能残留未知面板类型：整档作废，避免半残布局
+    const unknown = api.panels.some(
+      (panel) => !BOARD_PANELS.some((def) => def.key === (panel.params as { panelKey?: string })?.panelKey),
+    );
+    if (unknown) {
+      api.clear();
+      useBoardWindowStore.getState().hydrate({ windows: {} });
+      return false;
+    }
+    // 旧存档缺少个别窗口配置时再逐窗补默认值。
     for (const panel of api.panels) {
       useBoardWindowStore.getState().ensureWindow(panel.id);
     }
@@ -133,6 +135,7 @@ export function applyPayload(api: DockviewApi, payload: BoardDockPayload): boole
   } catch {
     try {
       api.clear();
+      useBoardWindowStore.getState().hydrate({ windows: {} });
     } catch {
       // 忽略
     }

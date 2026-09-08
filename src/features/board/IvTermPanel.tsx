@@ -41,8 +41,14 @@ export function IvTermPanel({ product, scope, panelId }: { product: OptionProduc
   const requests = [undefined, ...dates];
   const results = useQueries({ queries: requests.map((date) => ({
     queryKey: ["iv-term", product, scope, date ?? "current"],
-    queryFn: ({ signal }: { signal: AbortSignal }) => getIvTerm(product, scope, date, signal),
+    queryFn: ({ signal }: { signal: AbortSignal }) => getIvTerm(
+      product,
+      scope,
+      date,
+      AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+    ),
     staleTime: date ? Infinity : 30_000,
+    retry: false,
     refetchInterval: date ? false as const : 60_000,
     refetchOnWindowFocus: false,
   })) });
