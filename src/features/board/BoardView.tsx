@@ -12,7 +12,6 @@ import { useSnapshotSync } from "@/features/options/ingest-status";
 import { useOptionsDashboard } from "@/features/options/use-options-dashboard";
 import {
   DashboardToolbar,
-  ErrorDashboard,
   LoadingDashboard,
 } from "@/features/options/components/dashboard-ui";
 
@@ -163,20 +162,9 @@ export function BoardView() {
       />
 
       <div className="h-[calc(100vh-56px)] min-h-[320px] p-3 sm:p-4">
-        {dashboardQuery.isPending || !shareResolved ? <LoadingDashboard /> : null}
-        {dashboardQuery.isError ? (
-          <ErrorDashboard
-            error={
-              dashboardQuery.error instanceof Error
-                ? dashboardQuery.error
-                : new Error("未知错误")
-            }
-            onRetry={() => void dashboardQuery.refetch()}
-          />
-        ) : null}
-        {!dashboardQuery.isPending && !dashboardQuery.isError && shareResolved ? (
+        {!shareResolved ? <LoadingDashboard /> : (
           <BoardDock onApiReady={handleApiReady} sharedPayload={sharedPayload} />
-        ) : null}
+        )}
       </div>
     </>
   );

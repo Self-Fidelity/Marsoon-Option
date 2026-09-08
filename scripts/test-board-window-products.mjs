@@ -61,3 +61,25 @@ test('widget product changes are local; toolbar switches all windows including r
   assert.equal(store.getState().windows.chain.product, 'GC');
   assert.equal(store.getState().master.product, 'GC');
 });
+
+test('widget scope changes update only that widget and leave the master query stable', () => {
+  const { useBoardWindowStore: store, effectiveLineScopes, effectiveTableScope } = loadModule('../src/features/board/board-window-store.ts');
+  for (const id of ['volatility', 'gex']) store.getState().ensureWindow(id);
+  const before = store.getState();
+
+  store.getState().toggleLineScope('volatility', 'd30');
+  const afterLine = store.getState();
+  assert.equal(afterLine.master, before.master);
+  assert.equal(afterLine.perProductScope, before.perProductScope);
+  assert.equal(afterLine.windows.gex, before.windows.gex);
+  assert.equal(afterLine.windows.volatility.productLinked, false);
+  assert.deepEqual(effectiveLineScopes(afterLine.windows.volatility, afterLine.perProductScope), ['d30']);
+
+  store.getState().setWindowScope('gex', 'd90');
+  const afterTable = store.getState();
+  assert.equal(afterTable.master, before.master);
+  assert.equal(afterTable.perProductScope, before.perProductScope);
+  assert.equal(afterTable.windows.volatility, afterLine.windows.volatility);
+  assert.equal(afterTable.windows.gex.productLinked, false);
+  assert.equal(effectiveTableScope(afterTable.windows.gex, afterTable.perProductScope), 'd90');
+});

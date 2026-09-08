@@ -348,16 +348,8 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const state = get();
     const config = state.windows[id];
     if (!config) return;
-    // 顶栏周期入口删除后，联动窗的单选 chip 直接更新该品种联动组；解耦窗只写自己。
-    if (config.productLinked) {
-      const scopes = [scope];
-      set({
-        master: state.master.product === config.product ? { ...state.master, scopes } : state.master,
-        perProductScope: { ...state.perProductScope, [config.product]: scopes },
-      });
-      return;
-    }
-    set({ windows: { ...state.windows, [id]: { ...config, scope } } });
+    // 窗口内控件只更新当前窗口。首次自主选择时退出旧周期联动，避免触发全局查询。
+    set({ windows: { ...state.windows, [id]: { ...config, productLinked: false, scope, scopes: [scope] } } });
   },
 
   toggleLineScope: (id, scope) => {
@@ -365,17 +357,10 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const config = state.windows[id];
     if (!config) return;
     const sorted = [scope];
-    if (config.productLinked) {
-      set({
-        master: state.master.product === config.product ? { ...state.master, scopes: sorted } : state.master,
-        perProductScope: { ...state.perProductScope, [config.product]: sorted },
-      });
-      return;
-    }
     set({
       windows: {
         ...state.windows,
-        [id]: { ...config, scopes: sorted },
+        [id]: { ...config, productLinked: false, scope, scopes: sorted },
       },
     });
   },
