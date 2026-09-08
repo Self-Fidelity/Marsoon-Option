@@ -30,7 +30,7 @@
 
 ## 现状（2026-09-04）
 
-- **导航收敛为两项**：/board 拼装看板（7 面板全实装，Dockview 分窗 + 本地模板库 + URL 分享 `?layout=`）+ /teaching 教学看板（顶部功能栏 + 整页 iframe 加载 public/teaching.html）；旧路由（/、/gamma、/zero-dte、/flow、/volatility、/panel-shot）保留但移出导航。
+- **导航收敛为两项**：/board 拼装看板（7 面板全实装，Dockview 分窗 + 本地模板库 + URL 分享 `?layout=`）+ /teaching 教学看板（Next.js 课程导航 + `public/teaching-content/` 自包含 React 模块）；旧路由（/、/gamma、/zero-dte、/flow、/volatility、/panel-shot）保留但移出导航。
 - **周期 scope 五档多选总控**：close（收盘，Databento EOD 未接入恒空态）/ 0dte / d30（30DTE）/ d90（90D）/ all（RTH），/board 顶栏全局总控，至少 1 个、固定优先级 0dte > d30 > d90 > all > close，[0] 为主周期；旧 nearest 档已删除。
 - **侧栏全站统一、可收起**（收起态存 localStorage，开关见各页功能栏 SidebarToggleButton）；窗口联动语义定稿：联动=跟随总控、解耦=冻结当时快照窗内自治（📌 scopePinned 已废除）。
 - **快照落盘 + 日内回放已闭合**：快照落盘 data/snapshots/*.jsonl，06 日内轨迹由 GET /api/options/intraday 回放 jsonl 提供；API 共 5 个消费端点（dashboard / levels / chain / term / intraday，外加 POST /api/ingest/barchart）。

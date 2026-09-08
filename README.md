@@ -43,7 +43,7 @@ Marsoon Option
 
 ### 2. 教学看板 `/teaching`
 
-独立页：功能栏（侧栏开关 + 标题）+ 整页 iframe 加载 `public/teaching.html`。换课件只覆盖该文件。
+独立页：Next.js 功能栏与 7 项课程导航 + 自包含 React 教学模块；内容维护在 `public/teaching-content/`。
 
 ### 其它路由
 
@@ -94,7 +94,7 @@ pnpm start
 | 路径 | 层级 | 说明 |
 | --- | --- | --- |
 | `/board` | 产品：拼装看板 | 主工作台。面板 01–10 在这里打开 |
-| `/teaching` | 产品：教学看板 | `public/teaching.html` |
+| `/teaching` | 产品：教学看板首页；`?lesson=05`～`10` 切换各面板课程 | `public/teaching-content/` |
 | `/board?layout=v1.…` | 拼装看板能力 | 布局分享（deflate + base64url；无 CompressionStream 时 `v0.`） |
 | `/` `/gamma` `/zero-dte` `/flow` `/volatility` | 非产品 | 旧页，已移出导航 |
 | `/panel-shot` | 工具 | 单面板 HTML 导出 |

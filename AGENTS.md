@@ -19,6 +19,7 @@ CME 期货期权看板（ES/NQ/GC）。数据源：Barchart 免费源经本机 W
 > 2026-09-07（06 OHLC Legend）：OHLCV 悬浮读数固定在主图左上角，所有 indicator legend 从其下方开始纵向排列；小于 360px 时继续隐藏 OHLCV，indicator legend 回到 top-2。
 > 2026-09-07（06 OI/成交量 Profile）：原内嵌 GEX 剖面改为“期权 OI 分布”，实际画 Call/Put OI；原“期权成交量”改名“期权成交量分布”。两者每个 bin 的高度统一为一个真实 tick 经当前价格轴映射后的像素高度，最小 1px，缩放时自动变化。
 > 2026-09-07（公开文案边界）：错误、加载、等待和无数据状态不得暴露 Go/Databento/Barchart、内部域名或路径、HTTP 诊断、ticker/symbol/underlying/series id。`sanitizePublicData` 统一清洗 `/api/options/*` 浏览器响应；正常有数据视图仍可显示用户需要的品种与合约名称。
+> 2026-09-08（教学看板集成）：`/teaching` 为 Next.js/React 导航壳，默认首页，`?lesson=05`～`10` 切换对应课程；7 个自包含 React HTML 维护在 `public/teaching-content/`。旧 `public/teaching.html` 占位文件已删除。
 
 ## 周期 scope 架构（2026-09-02 起；2026-09-03 十一轮起五档）
 
