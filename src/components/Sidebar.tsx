@@ -1,6 +1,6 @@
 "use client";
 
-import { GraduationCap, LayoutGrid } from "lucide-react";
+import { Activity, GraduationCap, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ import { LogoutButton } from "./LogoutButton";
 export const navigation = [
   { label: "面板", code: "01", href: "/board", icon: LayoutGrid },
   { label: "投教", code: "02", href: "/teaching", icon: GraduationCap },
+  { label: "订单流", code: "03", href: "https://subapp.marsoon.cn/", icon: Activity },
 ];
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
@@ -60,7 +61,7 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
       </div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-2 border-t border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-3 border-t border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] lg:hidden"
         aria-label="移动端期权看板导航"
       >
         {navigation.map(({ label, href, icon: Icon }) => {
