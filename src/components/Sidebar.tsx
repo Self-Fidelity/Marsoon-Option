@@ -7,9 +7,9 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "./LogoutButton";
 
 export const navigation = [
-  { label: "面板", code: "01", href: "/board", icon: LayoutGrid },
-  { label: "投教", code: "02", href: "/teaching", icon: GraduationCap },
-  { label: "订单流", code: "03", href: "https://subapp.marsoon.cn/", icon: Activity },
+  { label: "面板", code: "01", href: "/board", icon: LayoutGrid, external: false },
+  { label: "投教", code: "02", href: "/teaching", icon: GraduationCap, external: false },
+  { label: "订单流", code: "03", href: "https://subapp.marsoon.cn/", icon: Activity, external: true },
 ];
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
@@ -34,12 +34,14 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
           </div>
 
           <nav className="space-y-1 px-2 py-3" aria-label="期权看板导航">
-            {navigation.map(({ label, href, icon: Icon }) => {
+            {navigation.map(({ label, href, icon: Icon, external }) => {
               const active = pathname === href;
               return (
                 <Link
                   key={href}
                   href={href}
+                  target={external ? "_blank" : undefined}
+                  rel={external ? "noopener noreferrer" : undefined}
                   aria-current={active ? "page" : undefined}
                   className={`group flex h-9 w-full items-center gap-2 rounded-[10px] border px-2.5 text-left text-[12px] font-semibold transition-colors ${
                     active
@@ -64,12 +66,14 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
         className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-3 border-t border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] lg:hidden"
         aria-label="移动端期权看板导航"
       >
-        {navigation.map(({ label, href, icon: Icon }) => {
+        {navigation.map(({ label, href, icon: Icon, external }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
+              target={external ? "_blank" : undefined}
+              rel={external ? "noopener noreferrer" : undefined}
               aria-current={active ? "page" : undefined}
               className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold ${
                 active ? "text-[var(--ms-brand)]" : "text-[var(--ms-text-tertiary)]"

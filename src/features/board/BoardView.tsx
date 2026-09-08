@@ -2,14 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DockviewApi } from "dockview-react";
 
 import type { OptionProduct, OptionScope } from "@/api/options";
 import { SidebarToggleButton } from "@/components/SidebarToggle";
-import { buildDashboardViewModel } from "@/features/options/dashboard-view-model";
 import { useSnapshotSync } from "@/features/options/ingest-status";
-import { useOptionsDashboard } from "@/features/options/use-options-dashboard";
 import {
   DashboardToolbar,
   LoadingDashboard,
@@ -65,9 +63,6 @@ export function BoardView() {
   const master = useBoardWindowStore((s) => s.master);
   const setMasterProduct = useBoardWindowStore((s) => s.setMasterProduct);
   const setMasterScopes = useBoardWindowStore((s) => s.setMasterScopes);
-  // 主周期 = 多选中最高优先级（排序后 [0]），顶栏读数与表格类面板共用此口径
-  const primaryScope = master.scopes[0] ?? "0dte";
-
   // URL 显式参数优先（深链/分享），只在变化时覆盖 store 主控；无参数时沿用持久化还原值
   const urlProduct = parseProduct(searchParams.get("product"));
   const urlScopes = parseScopes(searchParams.get("scope"));
@@ -95,16 +90,6 @@ export function BoardView() {
 
   // R3：快照版本（capturedAt）变化驱动失效，同版本各面板零重复请求
   useSnapshotSync();
-
-  // 顶部工具条读数只消费主周期这一份 dashboard；各窗口自行查询（同 key React Query 去重）
-  const dashboardQuery = useOptionsDashboard(master.product, primaryScope);
-  const viewModel = useMemo(
-    () =>
-      dashboardQuery.data && primaryScope !== "close"
-        ? buildDashboardViewModel(dashboardQuery.data, primaryScope)
-        : undefined,
-    [dashboardQuery.data, primaryScope],
-  );
 
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
   const handleApiReady = useCallback((api: DockviewApi) => setDockApi(api), []);
@@ -150,7 +135,6 @@ export function BoardView() {
     <>
       <DashboardToolbar
         product={master.product}
-        viewModel={viewModel}
         onProductChange={setMasterProduct}
         leading={<SidebarToggleButton />}
         productTrailing={
