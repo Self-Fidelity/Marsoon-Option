@@ -28,5 +28,6 @@ test('tail updates are incremental, earlier corrections use a full replacement',
  const before=[bar(t),bar(t+60)];
  assert.equal(tailUpdateStart(before,[bar(t),bar(t+60,4),bar(t+120)]),1);
  assert.equal(tailUpdateStart(before,[bar(t,8),bar(t+60)]),null);
+ assert.deepEqual(preserveLogicalRange(before,[...before,bar(t+120)],{from:0,to:8}),{from:0,to:8});
  assert.deepEqual(preserveLogicalRange(before,[bar(t-60),...before],{from:0,to:8}),{from:1,to:9});
 });

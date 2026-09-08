@@ -199,10 +199,12 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
     for (const series of [rt.candles, rt.line]) series.applyOptions({ priceFormat: { type: "custom", minMove: tick, formatter: (price: number) => formatPrice(price, tick) } });
     if (updateFrom === null) {
       rt.candles.setData(bars.map(candleData)); rt.line.setData(bars.map(lineData)); rt.volume.setData(bars.map(volumeData));
-      if (!reset && visible) rt.chart.timeScale().setVisibleLogicalRange(preserveLogicalRange(rt.bars, bars, visible));
     } else {
       for (const bar of bars.slice(updateFrom)) { rt.candles.update(candleData(bar)); rt.line.update(lineData(bar)); rt.volume.update(volumeData(bar)); }
     }
+    // Lightweight Charts 会在追加新 bar 时自动滚动到实时边缘。恢复更新前的逻辑区间，
+    // 让用户当前观察位置保持不动；若补入更早历史，则按新增数量平移以锚定原蜡烛。
+    if (!reset && visible) rt.chart.timeScale().setVisibleLogicalRange(preserveLogicalRange(rt.bars, bars, visible));
     barsByTime.current = new Map(bars.map((b) => [b.unix, b])); rt.bars = bars; rt.key = key;
     if (reset && bars.length) { rt.needsFit = true; setHovered(null); }
   }, [bars, chartApi, symbol, product, minutes, source?.day, tick]);
