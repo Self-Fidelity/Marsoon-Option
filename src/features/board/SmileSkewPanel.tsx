@@ -56,6 +56,13 @@ const SCOPE_LEGEND_LABEL: Record<OptionScope, string> = {
   d90: "90DTE",
 };
 
+const SCOPE_LINE_STYLE: Record<OptionScope, { dash?: string; name: string }> = {
+  "0dte": { name: "实线" },
+  d30: { dash: "10 4", name: "长虚线" },
+  d90: { dash: "2 4", name: "点线" },
+  close: { dash: "10 3 2 3", name: "点划线" },
+};
+
 export interface SmileScopeModel {
   scope: OptionScope;
   /** null = 该 scope 空态（close 待接入 / has_data:false），静默跳过、图例灰显 */
@@ -216,24 +223,25 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
           </g>
         ) : null}
 
-        {/* 各 scope 的 PUT / CALL IV 折线：主 scope 实线，其余虚线 + 低透明度 */}
+        {/* 各 scope 固定线型，Call/Put 再用红绿区分；主 scope 只加粗，不改变线型语义。 */}
         {curves.map((curve) => {
           const putSegments = buildSegments(curve.byStrike, strikes, (p) => p.putIV, x, y);
           const callSegments = buildSegments(curve.byStrike, strikes, (p) => p.callIV, x, y);
+          const style = SCOPE_LINE_STYLE[curve.scope];
           return (
-            <g key={curve.scope} opacity={curve.primary ? 1 : 0.55}>
+            <g key={curve.scope} opacity={curve.primary ? 1 : 0.76}>
               {putSegments.map((segment) => (
                 <path
                   key={`p-${curve.scope}-${segment}`} d={segment} fill="none"
-                  stroke="var(--ms-chart-sell)" strokeWidth={curve.primary ? 2 : 1.4}
-                  strokeDasharray={curve.primary ? undefined : "5 3"}
+                  stroke="var(--ms-chart-sell)" strokeWidth={curve.primary ? 2.2 : 1.6}
+                  strokeDasharray={style.dash}
                 />
               ))}
               {callSegments.map((segment) => (
                 <path
                   key={`c-${curve.scope}-${segment}`} d={segment} fill="none"
-                  stroke="var(--ms-chart-buy)" strokeWidth={curve.primary ? 2 : 1.4}
-                  strokeDasharray={curve.primary ? undefined : "5 3"}
+                  stroke="var(--ms-chart-buy)" strokeWidth={curve.primary ? 2.2 : 1.6}
+                  strokeDasharray={style.dash}
                 />
               ))}
             </g>
@@ -317,11 +325,13 @@ export function SmileSkewPanel({ models }: { models: SmileScopeModel[] }) {
         {segments.map((seg) => (
           <span
             key={seg.scope}
-            className={seg.model ? "" : "opacity-40"}
-            title={seg.model ? `${SCOPE_LEGEND_LABEL[seg.scope]} 周期曲线（实线=主，虚线=叠加）` : `${SCOPE_LEGEND_LABEL[seg.scope]} 周期无数据（空态跳过）`}
+            className={`flex items-center gap-1.5 ${seg.model ? "" : "opacity-40"}`}
+            title={seg.model ? `${SCOPE_LEGEND_LABEL[seg.scope]} · ${seg.model.referenceLabel ?? "期权"}` : `${SCOPE_LEGEND_LABEL[seg.scope]} 周期无数据（空态跳过）`}
           >
-            {SCOPE_LEGEND_LABEL[seg.scope]}{seg.model?.referenceLabel ? ` · ${seg.model.referenceLabel}` : ""}
-            {seg === primary ? "·主" : ""}
+            <svg width="22" height="6" viewBox="0 0 22 6" aria-hidden="true" className="shrink-0">
+              <line x1="0" y1="3" x2="22" y2="3" stroke="currentColor" strokeWidth={seg === primary ? 2 : 1.5} strokeDasharray={SCOPE_LINE_STYLE[seg.scope].dash} />
+            </svg>
+            {SCOPE_LEGEND_LABEL[seg.scope]} · {SCOPE_LINE_STYLE[seg.scope].name}{seg === primary ? " · 主" : ""}
           </span>
         ))}
         <span className="ml-auto text-[8px] text-[var(--ms-text-tertiary)]">
