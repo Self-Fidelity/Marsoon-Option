@@ -196,6 +196,7 @@ function currentFromDashboard(dash: Row): OptionsIntradayResponse["current"] {
 
 export async function intraday(request: Request) {
   const { product, scope, query } = params(request);
+  const optionsOnly = query.get("options_only") === "true";
   const now = Math.floor(Date.now() / 1000);
   const requestedTo = Number(query.get("to") ?? Math.floor(now / 60) * 60 + 1);
   const requestedFrom = Number(query.get("from") ?? requestedTo - 86400);
@@ -225,12 +226,12 @@ export async function intraday(request: Request) {
   let data = await unavailableEndpoint("/options/intraday", { product, scope, from, to, asof, underlying }, empty) as OptionsIntradayResponse;
   if (!unifiedAPI()) return data;
   const candleRange = { from, to };
-  try {
+  if (!optionsOnly) try {
     data = await attachAvailableCandles(data, product, upstream, snap, underlying ?? data.underlying_symbol, candleRange);
   } catch (error) {
     data = { ...data, candle_notice: error instanceof Error ? error.message : "K线读取失败" };
   }
-  if (!(data.bars?.length) && snap && underlying) {
+  if (!optionsOnly && !(data.bars?.length) && snap && underlying) {
     const fallback = { from: snap - 86400, to: snap + 3600 };
     data = await unavailableEndpoint("/options/intraday", { product, scope, from: fallback.from, to: fallback.to, asof: snap, underlying }, data) as OptionsIntradayResponse;
     try {
@@ -238,6 +239,7 @@ export async function intraday(request: Request) {
     } catch { /* keep whatever bars we already have */ }
   }
   if (!data.current && live?.dash) data = { ...data, current: currentFromDashboard(live.dash) };
+  if (optionsOnly && data.bars?.length) data = { ...data, bars: [] };
   if ((data.bars?.length ?? 0) > 0) data = { ...data, has_data: true, missing_reason: undefined };
   if (underlying) {
     data.underlying_symbol ??= underlying;

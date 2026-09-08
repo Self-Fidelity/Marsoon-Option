@@ -16,7 +16,7 @@ import {
   useOptionsDashboardMulti,
 } from "@/features/options/use-options-dashboard";
 import { useOptionsChain, useOptionsChainMulti } from "@/features/options/use-options-chain";
-import { useOptionsIntradayBars, useOptionsIntradayMulti } from "@/features/options/use-options-intraday";
+import { useOptionsCandleStream, useOptionsIntradayBars, useOptionsIntradayMulti } from "@/features/options/use-options-intraday";
 import { useOptionVolumeProfile } from "@/features/options/use-option-volume-profile";
 import { useOptionStats } from "@/features/options/use-option-stats";
 import { useOptionsTermMulti } from "@/features/options/use-options-term";
@@ -300,6 +300,12 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const historyDays = config?.historyDays ?? 1;
   const historyOffsetDays = config?.historyOffsetDays ?? 0;
   const barsQuery = useOptionsIntradayBars(product, historyDays, historyOffsetDays);
+  useOptionsCandleStream(
+    product,
+    barsQuery.data?.candle_underlying_symbol ?? barsQuery.data?.underlying_symbol,
+    historyDays,
+    historyOffsetDays,
+  );
   const intradayResults = useOptionsIntradayMulti(product, scopes, historyDays, historyOffsetDays);
   const levelDashboardResults = useOptionsDashboardMulti(product, levelLayerEnabled ? layerScopes : []);
   const results = useMemo(

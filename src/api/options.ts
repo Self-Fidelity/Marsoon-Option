@@ -523,7 +523,7 @@ export function getOptionIntraday(
 ): Promise<OptionsIntradayResponse> {
   return getOptionsApi<OptionsIntradayResponse>(
     "/api/options/intraday",
-    { product, scope, ...range },
+    { product, scope, options_only: true, ...range },
     signal,
   );
 }
