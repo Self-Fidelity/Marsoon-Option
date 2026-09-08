@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DockviewApi } from "dockview-react";
 
 import type { OptionProduct, OptionScope } from "@/api/options";
+import { FullscreenToggleButton } from "@/components/FullscreenToggleButton";
 import { SidebarToggleButton } from "@/components/SidebarToggle";
 import { useSnapshotSync } from "@/features/options/ingest-status";
 import {
@@ -143,6 +144,7 @@ export function BoardView() {
             <BoardTemplateMenu api={dockApi} />
           </div>
         }
+        trailing={<FullscreenToggleButton />}
       />
 
       <div className="h-[calc(100vh-56px)] min-h-[320px] p-3 sm:p-4">

@@ -1,4 +1,4 @@
-import type { IntradayBar, IntradayLevelPoint, OptionScope, OptionsIntradayResponse } from "@/api/options";
+import type { IntradayBar, OptionScope, OptionsIntradayResponse } from "@/api/options";
 
 export const INTRADAY_SCOPES: OptionScope[] = ["0dte", "d30", "d90", "close"];
 export const POSITION_FIELDS = [
@@ -50,14 +50,6 @@ export function buildChartPositions(segments: IntradaySegment[], primary: Option
     }
   }
   return positions;
-}
-/** Sample only at the bar start. Do not move a later water level backwards in time. */
-export function historicalPositionData(bars: IntradayBar[], points: IntradayLevelPoint[], field: typeof POSITION_FIELDS[number]["field"]) {
-  const observed = new Map(points.map((p) => [p.t, p[field]]));
-  return bars.map((b) => {
-    const value = observed.get(b.unix);
-    return value != null && Number.isFinite(value) && value > 0 ? { time: b.unix, value } : { time: b.unix };
-  });
 }
 export function tailUpdateStart(previous: IntradayBar[], next: IntradayBar[]): number | null {
   if (!previous.length || next.length < previous.length) return null;

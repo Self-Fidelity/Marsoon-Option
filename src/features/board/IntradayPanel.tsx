@@ -12,13 +12,13 @@ import { dataAvailabilityMessage } from "@/lib/data-messages";
 import { formatInteger, formatPrice } from "@/lib/formatters";
 import type { GexBreakdownModel } from "./gex-breakdown-model";
 import { candleUnderlying, pickIntradayBars, sameUnderlying } from "./intraday-data";
-import { INTRADAY_SCOPES, POSITION_FIELDS, aggregateIntradayBars, buildChartPositions, historicalPositionData, tailUpdateStart, preserveLogicalRange } from "./lightweight-model";
+import { INTRADAY_SCOPES, aggregateIntradayBars, buildChartPositions, tailUpdateStart, preserveLogicalRange } from "./lightweight-model";
 import { OptionOiProfilePrimitive } from "./lightweight-gex-profile";
 import { OptionVolumeProfilePrimitive } from "./lightweight-option-volume-profile";
 import { OptionVolumeHeatmapPrimitive } from "./lightweight-option-volume-heatmap";
 import type { OptionVolumeProfileModel } from "./option-volume-profile-model";
 import type { OptionVolumeHeatmapMetric, OptionVolumeHeatmapModel, OptionVolumeHeatmapWindow } from "./option-volume-heatmap-model";
-import { buildOptionStatsModel, OPTION_STATS_METRICS, sanitizeOptionStatsMetrics } from "./option-stats-model";
+import { buildOptionStatsModel, sanitizeOptionStatsMetrics } from "./option-stats-model";
 import { OptionStatsPane } from "./OptionStatsPane";
 import { useMeasureSize } from "./use-measure-size";
 
@@ -44,21 +44,19 @@ interface Runtime {
   optionVolumeProfile: OptionVolumeProfilePrimitive;
   optionVolumeHeatmap: OptionVolumeHeatmapPrimitive;
   priceLines: Array<{ series: PriceSeries; line: IPriceLine }>;
-  history: Map<string, ISeriesApi<"Line">>;
   bars: IntradayBar[];
   key: string;
-  needsFit: boolean;
   colors: Colors;
 }
 export interface IntradayScopeResult { data?: OptionsIntradayResponse; isPending: boolean; isError: boolean }
 
-export function IntradayPanel({ product, scopes, layerScopes, results, minutes, onMinutesChange, levelLayerEnabled, onLevelLayerEnabled, levelLayerVisible, onLevelLayerVisible, volumeIndicatorEnabled, onVolumeIndicatorEnabled, volumeIndicatorVisible, onVolumeIndicatorVisible, levelsOn, onLevelsOn, historyOn, onHistoryOn, vpOn, onVpEnabled, gexProfileVisible, onGexProfileVisible, profileScope, onProfileScopeChange, optionVolumeProfileEnabled, onOptionVolumeProfileEnabled, optionVolumeProfileVisible, onOptionVolumeProfileVisible, optionVolumeHeatmapEnabled, onOptionVolumeHeatmapEnabled, optionVolumeHeatmapVisible, onOptionVolumeHeatmapVisible, optionVolumeHeatmapMetric, onOptionVolumeHeatmapMetric, optionVolumeHeatmapWindow, onOptionVolumeHeatmapWindow, optionStatsEnabled, onOptionStatsEnabled, optionStatsVisible, onOptionStatsVisible, optionStatsMetrics, onToggleOptionStatsMetric, optionStatsResponse, onToggleLayerScope, historyDays, historyOffsetDays, onHistoryWindow, vpModel, optionVolumeModel, optionVolumeHeatmapModel, vpW, leadingControls }: {
+export function IntradayPanel({ product, scopes, layerScopes, results, minutes, onMinutesChange, levelLayerEnabled, onLevelLayerEnabled, levelLayerVisible, onLevelLayerVisible, volumeIndicatorEnabled, onVolumeIndicatorEnabled, volumeIndicatorVisible, onVolumeIndicatorVisible, levelsOn, onLevelsOn, vpOn, onVpEnabled, gexProfileVisible, onGexProfileVisible, profileScope, onProfileScopeChange, optionVolumeProfileEnabled, onOptionVolumeProfileEnabled, optionVolumeProfileVisible, onOptionVolumeProfileVisible, optionVolumeHeatmapEnabled, onOptionVolumeHeatmapEnabled, optionVolumeHeatmapVisible, onOptionVolumeHeatmapVisible, optionVolumeHeatmapMetric, onOptionVolumeHeatmapMetric, optionVolumeHeatmapWindow, onOptionVolumeHeatmapWindow, optionStatsEnabled, onOptionStatsEnabled, optionStatsVisible, onOptionStatsVisible, optionStatsMetrics, optionStatsResponse, onToggleLayerScope, historyDays, historyOffsetDays, onHistoryWindow, vpModel, optionVolumeModel, optionVolumeHeatmapModel, vpW, leadingControls }: {
   product: OptionProduct; scopes: OptionScope[]; results: IntradayScopeResult[]; minutes: number; onMinutesChange: (value: number) => void;
   layerScopes: OptionScope[]; levelLayerEnabled: boolean; onLevelLayerEnabled: (enabled: boolean) => void;
   levelLayerVisible: boolean; onLevelLayerVisible: (visible: boolean) => void;
   volumeIndicatorEnabled: boolean; onVolumeIndicatorEnabled: (enabled: boolean) => void;
   volumeIndicatorVisible: boolean; onVolumeIndicatorVisible: (visible: boolean) => void;
-  levelsOn: boolean; onLevelsOn: (enabled: boolean) => void; historyOn: boolean; onHistoryOn: (enabled: boolean) => void;
+  levelsOn: boolean; onLevelsOn: (enabled: boolean) => void;
   vpOn: boolean; onVpEnabled: (enabled: boolean) => void; gexProfileVisible: boolean; onGexProfileVisible: (visible: boolean) => void;
   profileScope: OptionScope; onProfileScopeChange: (scope: OptionScope) => void;
   optionVolumeProfileEnabled: boolean; onOptionVolumeProfileEnabled: (enabled: boolean) => void;
@@ -70,7 +68,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   volumeProfileScope?: OptionScope; onVolumeProfileScopeChange?: (scope: OptionScope) => void;
   optionStatsEnabled: boolean; onOptionStatsEnabled: (enabled: boolean) => void;
   optionStatsVisible: boolean; onOptionStatsVisible: (visible: boolean) => void;
-  optionStatsMetrics?: OptionStatsMetric[]; onToggleOptionStatsMetric: (metric: OptionStatsMetric) => void;
+  optionStatsMetrics?: OptionStatsMetric[];
   optionStatsResponse?: OptionStatsResponse;
   onToggleLayerScope: (scope: OptionScope) => void;
   historyDays: 1 | 3 | 7; historyOffsetDays: number; onHistoryWindow: (days: 1 | 3 | 7, offsetDays: number) => void;
@@ -81,7 +79,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   const legendListId = useId();
   const [levelSettingsOpen, setLevelSettingsOpen] = useState(false);
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
-  const [statsSettingsOpen, setStatsSettingsOpen] = useState(false);
   const [heatmapSettingsOpen, setHeatmapSettingsOpen] = useState(false);
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const [hovered, setHovered] = useState<IntradayBar | null>(null);
@@ -89,7 +86,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   const [chartHost, setChartHost] = useState<HTMLDivElement | null>(null);
   const runtime = useRef<Runtime | null>(null);
   const legendRef = useRef<HTMLDivElement | null>(null);
-  const statsLegendRef = useRef<HTMLDivElement | null>(null);
   const barsByTime = useRef(new Map<number, IntradayBar>());
   const [measureRef, size] = useMeasureSize<HTMLDivElement>();
   const setHost = useCallback((node: HTMLDivElement | null) => { measureRef(node); setChartHost(node); }, [measureRef]);
@@ -133,12 +129,11 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   );
 
   useEffect(() => {
-    if (!profileSettingsOpen && !levelSettingsOpen && !statsSettingsOpen && !heatmapSettingsOpen) return;
+    if (!profileSettingsOpen && !levelSettingsOpen && !heatmapSettingsOpen) return;
     const closeOutside = (event: PointerEvent) => {
-      if (!legendRef.current?.contains(event.target as Node) && !statsLegendRef.current?.contains(event.target as Node)) {
+      if (!legendRef.current?.contains(event.target as Node)) {
         setProfileSettingsOpen(false);
         setLevelSettingsOpen(false);
-        setStatsSettingsOpen(false);
         setHeatmapSettingsOpen(false);
       }
     };
@@ -146,7 +141,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       if (event.key === "Escape") {
         setProfileSettingsOpen(false);
         setLevelSettingsOpen(false);
-        setStatsSettingsOpen(false);
         setHeatmapSettingsOpen(false);
       }
     };
@@ -156,7 +150,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       document.removeEventListener("pointerdown", closeOutside, true);
       document.removeEventListener("keydown", closeEscape);
     };
-  }, [profileSettingsOpen, levelSettingsOpen, statsSettingsOpen, heatmapSettingsOpen]);
+  }, [profileSettingsOpen, levelSettingsOpen, heatmapSettingsOpen]);
 
   // One chart per mounted panel. StrictMode/unmount destroys its canvas and listeners.
   useEffect(() => {
@@ -202,7 +196,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
     const profile = new OptionOiProfilePrimitive(); candles.attachPrimitive(profile);
     const optionVolumeProfile = new OptionVolumeProfilePrimitive(); candles.attachPrimitive(optionVolumeProfile);
     const optionVolumeHeatmap = new OptionVolumeHeatmapPrimitive(); candles.attachPrimitive(optionVolumeHeatmap);
-    runtime.current = { chart, candles, line, volume, active: candles, profile, optionVolumeProfile, optionVolumeHeatmap, priceLines: [], history: new Map(), bars: [], key: "", needsFit: false, colors };
+    runtime.current = { chart, candles, line, volume, active: candles, profile, optionVolumeProfile, optionVolumeHeatmap, priceLines: [], bars: [], key: "", colors };
     setChartApi(chart);
     const onCrosshair: Parameters<IChartApi["subscribeCrosshairMove"]>[0] = (event) => {
       setHovered(typeof event.time === "number" ? barsByTime.current.get(event.time) ?? null : null);
@@ -232,7 +226,11 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
     // 让用户当前观察位置保持不动；若补入更早历史，则按新增数量平移以锚定原蜡烛。
     if (!reset && visible) rt.chart.timeScale().setVisibleLogicalRange(preserveLogicalRange(rt.bars, bars, visible));
     barsByTime.current = new Map(bars.map((b) => [b.unix, b])); rt.bars = bars; rt.key = key;
-    if (reset && bars.length) { rt.needsFit = true; setHovered(null); }
+    if (reset && bars.length) {
+      setHovered(null);
+      rt.chart.priceScale("right").setAutoScale(true);
+      rt.chart.timeScale().fitContent();
+    }
   }, [bars, chartApi, symbol, product, minutes, source?.day, tick]);
 
   useEffect(() => {
@@ -262,7 +260,14 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       optionVolumeHeatmapEnabled && optionVolumeHeatmapVisible ? optionVolumeHeatmapModel : undefined,
       tick,
       minutes,
-      { buy: rt.colors.buy, sell: rt.colors.sell, total: rt.colors.spot },
+      {
+        background: rt.colors.background,
+        buy: rt.colors.buy,
+        buyHot: rt.colors.cw,
+        sell: rt.colors.sell,
+        sellHot: rt.colors.pw,
+        total: rt.colors.spot,
+      },
     );
   }, [chartApi, optionVolumeHeatmapEnabled, optionVolumeHeatmapVisible, optionVolumeHeatmapModel, optionVolumeHeatmapMetric, optionVolumeHeatmapWindow, minutes, mode, tick]);
 
@@ -275,26 +280,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       return { series: rt.active, line: rt.active.createPriceLine({ price: position.price, title, color, lineWidth: 1, lineStyle: position.kind === "SPOT" ? LineStyle.Dotted : LineStyle.Dashed, axisLabelVisible: true }) };
     });
   }, [chartApi, positions, mode]);
-
-  useEffect(() => {
-    const rt = runtime.current; if (!rt) return;
-    const used = new Set<string>();
-    if (levelsLayerVisible && historyOn) for (const segment of layerSegments) {
-      if (!segment.data?.levels.length) continue;
-      for (const field of POSITION_FIELDS) {
-        const key = `${segment.scope}:${field.kind}`; used.add(key);
-        let series = rt.history.get(key);
-        if (!series) {
-          series = rt.chart.addSeries(LineSeries, { color: field.kind === "CW" ? rt.colors.cw : field.kind === "PW" ? rt.colors.pw : rt.colors.flip, lineWidth: 1, lineType: LineType.WithSteps, lineStyle: segment.scope === primary ? LineStyle.Solid : LineStyle.Dashed, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false, autoscaleInfoProvider: () => null });
-          rt.history.set(key, series);
-        }
-        series.setData(historicalPositionData(bars, segment.data.levels, field.field).map((p) => ({ ...p, time: p.time as UTCTimestamp })));
-      }
-    }
-    for (const [key, series] of rt.history) if (!used.has(key)) { rt.chart.removeSeries(series); rt.history.delete(key); }
-    // Fit after all series share the new time grid (especially when switching periods).
-    if (rt.needsFit && bars.length) { rt.chart.priceScale("right").setAutoScale(true); rt.chart.timeScale().fitContent(); rt.needsFit = false; }
-  }, [chartApi, levelsLayerVisible, historyOn, layerSegments, bars, primary]);
 
   const resetView = () => { const rt = runtime.current; if (rt && bars.length) { rt.chart.priceScale("right").setAutoScale(true); rt.chart.timeScale().fitContent(); } };
   const button = "ms-control h-7 px-2 text-[11px] font-semibold text-[var(--ms-text-secondary)] aria-pressed:bg-[var(--ms-brand-dim)] aria-pressed:text-[var(--ms-brand)]";
@@ -310,13 +295,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       <p className="mb-1.5 text-[11px] font-semibold text-[var(--ms-text-secondary)]">期权水位设置</p>
       <div className="flex flex-wrap gap-1">{scopeOptions.map((item) => <button key={item.value} type="button" className={button} aria-pressed={layerScopes.includes(item.value)} onClick={() => onToggleLayerScope(item.value)}>{item.label}</button>)}</div>
       <label className="mt-2 flex items-center justify-between text-[10px] text-[var(--ms-text-secondary)]">当前水位<input type="checkbox" checked={levelsOn} onChange={(e) => onLevelsOn(e.target.checked)} /></label>
-      <label className="mt-1 flex items-center justify-between text-[10px] text-[var(--ms-text-secondary)]">历史水位<input type="checkbox" checked={historyOn} onChange={(e) => onHistoryOn(e.target.checked)} /></label>
-    </div>
-  );
-  const statsSettingsPanel = (
-    <div className="ms-popover w-48 p-2.5">
-      <p className="mb-1.5 text-[11px] font-semibold text-[var(--ms-text-secondary)]">期权统计设置</p>
-      <div className="flex flex-col gap-1">{OPTION_STATS_METRICS.map((item) => <button key={item.key} type="button" className={`${button} flex justify-between`} aria-pressed={selectedStatsMetrics.includes(item.key)} onClick={() => onToggleOptionStatsMetric(item.key)}><span>{item.label}</span>{selectedStatsMetrics.includes(item.key) ? <Check size={12} /> : null}</button>)}</div>
     </div>
   );
   const heatmapSettingsPanel = (
@@ -333,14 +311,10 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
     </div>
   );
   const statsLegend = (
-    <div ref={statsLegendRef} className="group/stats relative font-mono text-[10px]">
-      <div onClick={() => { setStatsSettingsOpen((open) => !open); setProfileSettingsOpen(false); setLevelSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${optionStatsVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
-        <span className="mr-1 text-[var(--ms-text-primary)]">期权统计 · 0DTE</span>
+    <div className={`flex h-7 items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 font-mono text-[10px] ${optionStatsVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
+        <span className="mr-1 text-[var(--ms-text-primary)]">净 GEX · 0DTE</span>
         <button type="button" aria-label={optionStatsVisible ? "隐藏期权统计" : "显示期权统计"} aria-pressed={optionStatsVisible} onClick={(event) => { event.stopPropagation(); onOptionStatsVisible(!optionStatsVisible); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{optionStatsVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-        <button type="button" aria-label="设置期权统计" aria-expanded={statsSettingsOpen} onClick={(event) => { event.stopPropagation(); setStatsSettingsOpen((open) => !open); setProfileSettingsOpen(false); setLevelSettingsOpen(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
-        <button type="button" aria-label="删除期权统计" onClick={(event) => { event.stopPropagation(); setStatsSettingsOpen(false); onOptionStatsEnabled(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
-      </div>
-      <div className={`${statsSettingsOpen ? "visible opacity-100" : "invisible opacity-0"} absolute bottom-full left-0 z-50 mb-1 transition`}>{statsSettingsPanel}</div>
+        <button type="button" aria-label="删除期权统计" onClick={() => onOptionStatsEnabled(false)} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
     </div>
   );
   return (
@@ -377,10 +351,10 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
         {vpOn || optionVolumeProfileEnabled || optionVolumeHeatmapEnabled || levelLayerEnabled || volumeIndicatorEnabled ? <div ref={legendRef} className={`absolute left-2 ${readout && size.width >= 360 ? "top-10" : "top-2"} z-30 flex flex-col items-start gap-1 font-mono text-[10px]`}>
           <div id={legendListId} className={legendsCollapsed ? "hidden" : "flex flex-col items-start gap-1"}>
           {vpOn ? <div className="group/profile relative">
-            <div onClick={() => { setProfileSettingsOpen((open) => !open); setLevelSettingsOpen(false); setStatsSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${gexProfileVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
+            <div onClick={() => { setProfileSettingsOpen((open) => !open); setLevelSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${gexProfileVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
               <span className="mr-1 text-[var(--ms-text-primary)]">期权OI分布 · {LEGEND_PREFIX[profileScope]}</span>
               <button type="button" aria-label={gexProfileVisible ? "隐藏期权 OI 分布" : "显示期权 OI 分布"} aria-pressed={gexProfileVisible} onClick={(event) => { event.stopPropagation(); onGexProfileVisible(!gexProfileVisible); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{gexProfileVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-              <button type="button" aria-label="设置期权 OI 分布" aria-expanded={profileSettingsOpen} onClick={(event) => { event.stopPropagation(); setProfileSettingsOpen((open) => !open); setLevelSettingsOpen(false); setStatsSettingsOpen(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
+              <button type="button" aria-label="设置期权 OI 分布" aria-expanded={profileSettingsOpen} onClick={(event) => { event.stopPropagation(); setProfileSettingsOpen((open) => !open); setLevelSettingsOpen(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
               <button type="button" aria-label="删除期权 OI 分布" onClick={(event) => { event.stopPropagation(); setProfileSettingsOpen(false); onVpEnabled(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
             </div>
             <div className={`${profileSettingsOpen ? "visible opacity-100" : "invisible opacity-0"} absolute left-0 top-full z-40 mt-1 transition`}>
@@ -393,7 +367,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
             <button type="button" aria-label="删除期权成交量分布" onClick={() => onOptionVolumeProfileEnabled(false)} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
           </div> : null}
           {optionVolumeHeatmapEnabled ? <div className="group/heatmap relative">
-            <div onClick={() => { setHeatmapSettingsOpen((open) => !open); setProfileSettingsOpen(false); setLevelSettingsOpen(false); setStatsSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${optionVolumeHeatmapVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
+            <div onClick={() => { setHeatmapSettingsOpen((open) => !open); setProfileSettingsOpen(false); setLevelSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${optionVolumeHeatmapVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
               <span className="mr-1 text-[var(--ms-text-primary)]">期权成交热图 · {optionVolumeHeatmapMetric === "difference" ? "C−P" : optionVolumeHeatmapMetric === "total" ? "总量" : optionVolumeHeatmapMetric === "ratio" ? "占比" : optionVolumeHeatmapMetric.toUpperCase()} · {optionVolumeHeatmapWindow === "session" ? "累计" : optionVolumeHeatmapWindow}</span>
               <button type="button" aria-label={optionVolumeHeatmapVisible ? "隐藏期权成交热图" : "显示期权成交热图"} aria-pressed={optionVolumeHeatmapVisible} onClick={(event) => { event.stopPropagation(); onOptionVolumeHeatmapVisible(!optionVolumeHeatmapVisible); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{optionVolumeHeatmapVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
               <button type="button" aria-label="设置期权成交热图" aria-expanded={heatmapSettingsOpen} onClick={(event) => { event.stopPropagation(); setHeatmapSettingsOpen((open) => !open); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
@@ -402,10 +376,10 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
             <div className={`${heatmapSettingsOpen ? "visible opacity-100" : "invisible opacity-0"} absolute left-0 top-full z-40 mt-1 transition`}>{heatmapSettingsPanel}</div>
           </div> : null}
           {levelLayerEnabled ? <div className="group/levels relative">
-            <div onClick={() => { setLevelSettingsOpen((open) => !open); setProfileSettingsOpen(false); setStatsSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${levelLayerVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
+            <div onClick={() => { setLevelSettingsOpen((open) => !open); setProfileSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${levelLayerVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
               <span className="mr-1 text-[var(--ms-text-primary)]">期权水位 · {layerScopes.map((scope) => LEGEND_PREFIX[scope]).join("+")}</span>
               <button type="button" aria-label={levelLayerVisible ? "隐藏期权水位" : "显示期权水位"} aria-pressed={levelLayerVisible} onClick={(event) => { event.stopPropagation(); onLevelLayerVisible(!levelLayerVisible); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{levelLayerVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-              <button type="button" aria-label="设置期权水位" aria-expanded={levelSettingsOpen} onClick={(event) => { event.stopPropagation(); setLevelSettingsOpen((open) => !open); setProfileSettingsOpen(false); setStatsSettingsOpen(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
+              <button type="button" aria-label="设置期权水位" aria-expanded={levelSettingsOpen} onClick={(event) => { event.stopPropagation(); setLevelSettingsOpen((open) => !open); setProfileSettingsOpen(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
               <button type="button" aria-label="删除期权水位" onClick={(event) => { event.stopPropagation(); setLevelSettingsOpen(false); onLevelLayerEnabled(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
             </div>
             <div className={`${levelSettingsOpen ? "visible opacity-100" : "invisible opacity-0"} absolute left-0 top-full z-40 mt-1 transition`}>

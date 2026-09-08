@@ -17,12 +17,14 @@ export function DashboardToolbar({
   onProductChange,
   leading,
   productTrailing,
+  trailing,
 }: {
   product: OptionProduct;
   viewModel?: DashboardViewModel;
   onProductChange: (product: OptionProduct) => void;
   leading?: ReactNode;
   productTrailing?: ReactNode;
+  trailing?: ReactNode;
 }) {
   return (
     <header className="sticky top-0 z-[200] flex h-14 items-center gap-2 border-b border-[var(--ms-separator)] bg-[var(--ms-app-bg)] px-3 sm:px-4">
@@ -47,6 +49,7 @@ export function DashboardToolbar({
           </div>
         ) : null}
       </div>
+      {trailing ? <div className="ml-auto flex items-center">{trailing}</div> : null}
     </header>
   );
 }

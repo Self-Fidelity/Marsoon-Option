@@ -311,7 +311,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const setOptionVolumeHeatmapWindow = useBoardWindowStore((s) => s.setOptionVolumeHeatmapWindow);
   const setOptionStatsEnabled = useBoardWindowStore((s) => s.setOptionStatsEnabled);
   const setOptionStatsVisible = useBoardWindowStore((s) => s.setOptionStatsVisible);
-  const toggleOptionStatsMetric = useBoardWindowStore((s) => s.toggleOptionStatsMetric);
   const setVolumeIndicatorEnabled = useBoardWindowStore((s) => s.setVolumeIndicatorEnabled);
   const setVolumeIndicatorVisible = useBoardWindowStore((s) => s.setVolumeIndicatorVisible);
   const toggleOptionLayerScope = useBoardWindowStore((s) => s.toggleOptionLayerScope);
@@ -409,8 +408,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
           onVolumeIndicatorVisible={(visible) => setVolumeIndicatorVisible(panelId, visible)}
           levelsOn={config?.optionLevelsOn !== false}
           onLevelsOn={(enabled) => setOptionLayerPart(panelId, "levels", enabled)}
-          historyOn={config?.optionHistoryOn === true}
-          onHistoryOn={(enabled) => setOptionLayerPart(panelId, "history", enabled)}
           vpOn={vpOn}
           onVpEnabled={(enabled) => setVpEnabled(panelId, enabled)}
           gexProfileVisible={gexProfileVisible}
@@ -438,7 +435,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
           optionStatsVisible={optionStatsVisible}
           onOptionStatsVisible={(visible) => setOptionStatsVisible(panelId, visible)}
           optionStatsMetrics={config?.optionStatsMetrics}
-          onToggleOptionStatsMetric={(metric) => toggleOptionStatsMetric(panelId, metric)}
           optionStatsResponse={optionStatsQuery.data}
           onToggleLayerScope={(scope) => toggleOptionLayerScope(panelId, scope)}
           historyDays={historyDays}

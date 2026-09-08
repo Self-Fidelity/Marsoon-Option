@@ -2,8 +2,6 @@ import type { IntradayBar, OptionStatsMetric, OptionStatsPoint, OptionStatsRespo
 
 export const OPTION_STATS_METRICS: ReadonlyArray<{ key: OptionStatsMetric; label: string }> = [
   { key: "netGex", label: "净 GEX" },
-  { key: "netDex", label: "净 DEX" },
-  { key: "netChex", label: "净 CHEX" },
 ];
 export const DEFAULT_OPTION_STATS_METRICS: OptionStatsMetric[] = OPTION_STATS_METRICS.map((metric) => metric.key);
 export const QUALITY_MISSING_OI = 1 << 2;

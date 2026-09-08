@@ -5,6 +5,7 @@ import { Crosshair } from "lucide-react";
 import { daysToExpiry, formatExpiry, formatInteger, formatNotional, formatPrice } from "@/lib/formatters";
 import { useBoardFocusStore } from "./board-focus-store";
 import { displayHeatmapValue, heatmapCellKey, type ExpirationHeatmapModel, type HeatmapCellDatum, type HeatmapExpiryMode } from "./expiration-heatmap-model";
+import { buildOpaquePalette, heatmapPaletteIndex } from "./heatmap-color-scale";
 import { nearbyStrikeWindow, virtualRowWindow } from "./expiration-heatmap-viewport";
 import { useMeasureSize } from "./use-measure-size";
 
@@ -19,12 +20,11 @@ const ROW_H = 28;
 const HEADER_H = 44;
 const AXIS_W = 76;
 function valueOf(cell: HeatmapCellDatum | undefined, metric: Metric) { return cell?.[metric]; }
-function heat(value: number, maxAbs: number) {
-  if (Math.abs(value) < 1e-9) return "var(--ms-panel-bg)";
-  // P95 截顶由调用侧计算；平方根拉伸中小值，避免极端大值把其余格压成同一暗色。
-  const strength = Math.sqrt(Math.min(1, Math.abs(value) / Math.max(maxAbs, 1e-9)));
-  const color = value >= 0 ? "var(--ms-chart-buy)" : "var(--ms-chart-sell)";
-  return `color-mix(in srgb, ${color} ${Math.round(16 + strength * 80)}%, var(--ms-panel-bg))`;
+type HeatmapPalettes = { background: string; buy: string[]; sell: string[] };
+function heat(value: number, maxAbs: number, palettes: HeatmapPalettes) {
+  if (Math.abs(value) < 1e-9) return palettes.background;
+  const palette = value >= 0 ? palettes.buy : palettes.sell;
+  return palette[heatmapPaletteIndex(value, maxAbs)]!;
 }
 
 /** Rust 终端式到期热力图：日期列 × 行权价行、固定行高、全局色阶、关键位短标记。 */
@@ -63,6 +63,16 @@ export function ExpirationHeatmapPanel({
     values.sort((a, b) => a - b);
     return values[Math.floor((values.length - 1) * 0.95)]!;
   }, [cells, metric, strikes, expirations]);
+  const palettes = useMemo<HeatmapPalettes>(() => {
+    const style = typeof document === "undefined" ? undefined : getComputedStyle(document.documentElement);
+    const read = (name: string, fallback: string) => style?.getPropertyValue(name).trim() || fallback;
+    const background = read("--ms-panel-bg", "#0d0d0d");
+    return {
+      background,
+      buy: buildOpaquePalette(background, read("--ms-chart-buy", "#16b968"), read("--ms-buy-bright", "#54df98")),
+      sell: buildOpaquePalette(background, read("--ms-chart-sell", "#e5484d"), read("--ms-sell-bright", "#ff7a76")),
+    };
+  }, []);
   const nearest = (value: number | undefined) => value === undefined || strikes.length === 0 ? undefined : strikes.reduce((best, strike) => Math.abs(strike - value) < Math.abs(best - value) ? strike : best);
   const spotStrike = nearest(model.spot);
   const centerSpot = useCallback((behavior: ScrollBehavior) => {
@@ -124,7 +134,7 @@ export function ExpirationHeatmapPanel({
                 if (nearest(levels?.putWall) === strike) marks.push("PW");
                 if (nearest(levels?.flip) === strike) marks.push("ΓF");
                 const active = hover?.expiration === expiration && hover?.strike === strike;
-                return <button key={expiration} type="button" onMouseEnter={() => setHover({ expiration, strike })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ expiration, strike })} onBlur={() => setHover(null)} onClick={() => setFocus({ expiry: expiration, strike })} className={`relative border-r border-[var(--ms-grid)] font-mono text-[9px] tabular-nums transition ${active ? "outline outline-1 -outline-offset-1 outline-[var(--ms-brand)]" : ""}`} style={{ background: typeof value === "number" ? heat(value, maxAbs) : "var(--ms-panel-bg)", color: "var(--ms-text-primary)" }} title={`${formatExpiry(expiration)} · ${formatPrice(strike, model.tickSize)} · ${METRICS.find((item) => item.value === metric)?.label}: ${metric === "oiImbalance" ? formatInteger(value) : formatNotional(value)}${cell?.qualityFlags ? ` · quality_flags=${cell.qualityFlags}` : ""}`}>
+                return <button key={expiration} type="button" onMouseEnter={() => setHover({ expiration, strike })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ expiration, strike })} onBlur={() => setHover(null)} onClick={() => setFocus({ expiry: expiration, strike })} className={`relative border-r border-[var(--ms-grid)] font-mono text-[9px] tabular-nums ${active ? "outline outline-1 -outline-offset-1 outline-[var(--ms-brand)]" : ""}`} style={{ background: typeof value === "number" ? heat(value, maxAbs, palettes) : palettes.background, color: "var(--ms-text-primary)", opacity: 1 }} title={`${formatExpiry(expiration)} · ${formatPrice(strike, model.tickSize)} · ${METRICS.find((item) => item.value === metric)?.label}: ${metric === "oiImbalance" ? formatInteger(value) : formatNotional(value)}${cell?.qualityFlags ? ` · quality_flags=${cell.qualityFlags}` : ""}`}>
                   {showNumbers && typeof value === "number" ? <span>{metric === "oiImbalance" ? formatInteger(value) : formatNotional(value).replace("$", "")}</span> : null}
                   {marks.length ? <span className="absolute left-0 top-0 bg-[var(--ms-plot-bg)] px-0.5 text-[7px] text-[var(--ms-brand)]">{marks.join("·")}</span> : null}
                   {cell?.qualityFlags ? <span className="absolute right-0 top-0 h-0 w-0 border-l-[4px] border-t-[4px] border-l-transparent border-t-[var(--ms-brand)]" aria-hidden="true" /> : null}
