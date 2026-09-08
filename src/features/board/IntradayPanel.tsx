@@ -164,8 +164,23 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       localization: { locale: "en-US", timeFormatter: (time: Time) => `${date.format(timeDate(time))} ${clock.format(timeDate(time))} CT` },
       handleScroll: true, handleScale: true,
     });
-    const candles = chart.addSeries(CandlestickSeries, { upColor: colors.buy, downColor: colors.sell, wickUpColor: colors.buy, wickDownColor: colors.sell, borderVisible: false });
-    const line = chart.addSeries(LineSeries, { color: colors.text, lineWidth: 2, visible: false, crosshairMarkerVisible: true });
+    const candles = chart.addSeries(CandlestickSeries, {
+      upColor: colors.buy,
+      downColor: colors.sell,
+      wickUpColor: colors.buy,
+      wickDownColor: colors.sell,
+      borderVisible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    const line = chart.addSeries(LineSeries, {
+      color: colors.text,
+      lineWidth: 2,
+      visible: false,
+      crosshairMarkerVisible: true,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
     const volume = chart.addSeries(HistogramSeries, {
       priceScaleId: "volume",
       priceFormat: { type: "volume" },
