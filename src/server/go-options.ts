@@ -2,6 +2,7 @@ import "server-only";
 import { sanitizeDataCopy, sanitizePublicData } from "@/lib/data-messages";
 import { allowedStatusEntry, bindOptionQuery, checkBoundResponse, fixedOptionUnderlying } from "./option-underlying";
 import { attachAvailableCandles, sessionStart } from "./intraday-candles";
+import { isCurrentPreviousEod } from "./eod-freshness";
 import type { OptionsChainResponse, OptionsDashboardResponse, OptionsIntradayResponse } from "@/api/options";
 import type { OptionProduct, OptionScope } from "@/api/options";
 import { composeChainFromDashboard } from "./chain-from-dashboard";
@@ -121,13 +122,26 @@ export async function dashboard(product: OptionProduct, scope: OptionScope, requ
         asof: asofUnix,
       }));
       const cells = list((object(raw.heatmap ?? {})).cells ?? []);
+      const snapshot = number(raw.snapshot_unix) ?? number(object(raw.market_state ?? {}).unix);
+      if (scope === "close" && asofUnix === undefined && !isCurrentPreviousEod(snapshot)) return undefined;
       if (raw.has_data !== false && (cells.length > 0 || raw.summary || raw.market_state)) {
         return { ...raw, product, scope, underlying_symbol: raw.underlying_symbol ?? underlying };
       }
       return undefined;
     };
-    const hit = await readDashboard(asof);
+    let hit: Row | undefined;
+    try {
+      hit = await readDashboard(asof);
+    } catch (error) {
+      if (scope === "close" && asof === undefined) {
+        return emptyDashboard(product, scope, "前一交易日收盘数据尚未就绪");
+      }
+      throw error;
+    }
     if (hit) return hit;
+    if (scope === "close" && asof === undefined) {
+      return emptyDashboard(product, scope, "前一交易日收盘数据尚未就绪");
+    }
     if (asof === undefined) {
       // A dashboard/heatmap must fall back to the same scope. A newer
       // `nearest` state is not a valid replacement for an older 0DTE surface.
@@ -160,7 +174,7 @@ export async function levels(request: Request) {
 }
 async function latestSnapshot(product: OptionProduct, scope: OptionScope) {
   try {
-    const dash = object(await dashboard(product, scope === "close" ? "0dte" : scope));
+    const dash = object(await dashboard(product, scope));
     const state = object(dash.market_state ?? {});
     const snap = number(dash.snapshot_unix) ?? number(state.unix);
     const underlying = typeof state.underlying_symbol === "string" ? state.underlying_symbol : await resolvedUnderlying(product);
@@ -213,9 +227,10 @@ export async function intraday(request: Request) {
       return finishIntraday({ ...empty, candle_notice: error instanceof Error ? error.message : "K线读取失败" });
     }
   }
-  const live = await latestSnapshot(product, scope);
+  // close 直接读取后端 EOD intraday；不得先用盘中 0DTE dashboard 构造同名快照。
+  const live = scope === "close" ? undefined : await latestSnapshot(product, scope);
   const statusSnap = !live && scope !== "close" ? await latestStatusUnix(product, scope) : undefined;
-  const underlying = live?.underlying ?? (scope !== "close" ? await resolvedUnderlying(product).catch(() => undefined) : undefined);
+  const underlying = live?.underlying ?? await resolvedUnderlying(product).catch(() => undefined);
   const snap = live?.snap ?? statusSnap;
   const from = snap && requestedTo < snap - 3600 ? snap - 86400 : requestedFrom;
   const to = snap && requestedTo < snap - 3600 ? snap + 3600 : Math.max(requestedTo, snap ? snap + 3600 : requestedTo);
@@ -225,6 +240,17 @@ export async function intraday(request: Request) {
   const empty = { product, scope, source: "options-http", day, has_data: false, bars: [], levels: [], current: null, missing_reason: "当前暂无日内行情", underlying_symbol: underlying } as OptionsIntradayResponse;
   let data = await unavailableEndpoint("/options/intraday", { product, scope, from, to, asof, underlying }, empty) as OptionsIntradayResponse;
   if (!unifiedAPI()) return data;
+  if (scope === "close") {
+    const captured = number(data.current?.captured_at) ?? number((data as unknown as Row).snapshot_unix);
+    if (!isCurrentPreviousEod(captured)) {
+      return finishIntraday({
+        ...empty,
+        underlying_symbol: underlying,
+        candle_underlying_symbol: underlying,
+        missing_reason: "前一交易日收盘数据尚未就绪",
+      });
+    }
+  }
   const candleRange = { from, to };
   if (!optionsOnly) try {
     data = await attachAvailableCandles(data, product, upstream, snap, underlying ?? data.underlying_symbol, candleRange);
