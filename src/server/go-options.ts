@@ -398,26 +398,6 @@ export async function optionVolumeHeatmap(request: Request) {
     has_data: clean.length > 0, rows: clean,
   };
 }
-export async function optionStats(request: Request) {
-  const { product, query } = params(request);
-  const from = Number(query.get("from"));
-  const to = Number(query.get("to"));
-  const timeframe = Number(query.get("timeframe"));
-  const allowedTimeframes = new Set([60, 300, 900, 1800, 3600]);
-  if (![from, to, timeframe].every(Number.isSafeInteger) || from <= 0 || to <= from || to - from > 7 * 86400 || !allowedTimeframes.has(timeframe)) {
-    throw new GoOptionsError("期权 Stats 时间范围或周期无效", 400);
-  }
-  const live = await latestSnapshot(product, "0dte");
-  const empty = { product, scope: "0dte", from, to, timeframe, window_mode: "session_open_expected_move", has_data: false, points: [] };
-  let data = object(await unavailableEndpoint("/options/stats", { product, from, to, timeframe, underlying: live?.underlying }, empty));
-  const points = list(data.points ?? []);
-  if (points.length === 0 && live?.snap) {
-    data = object(await unavailableEndpoint("/options/stats", {
-      product, from: live.snap - 86400, to: live.snap + 3600, timeframe, underlying: live.underlying,
-    }, empty));
-  }
-  return data;
-}
 export async function chain(request: Request) {
   const { product, scope, query } = params(request);
   const expirationRaw = Number(query.get("expiration"));

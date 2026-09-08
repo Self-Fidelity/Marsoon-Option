@@ -9,7 +9,6 @@ export type OptionProduct = "NQ" | "ES" | "GC";
  */
 export const OPTION_SCOPES = ["close", "0dte", "d30", "d90"] as const;
 export type OptionScope = (typeof OPTION_SCOPES)[number];
-export type OptionStatsMetric = "netGex" | "netDex" | "netChex";
 /** 共享分析层实算的三档（close 由官方 EOD 独立计算） */
 export type ComputedScope = Exclude<OptionScope, "close">;
 export type QueryValue = string | number | boolean | undefined;
@@ -342,40 +341,6 @@ export interface OptionVolumeHeatmapResponse extends OptionDataMeta {
   rows: OptionVolumeHeatmapRow[];
 }
 
-export interface OptionStatsPoint {
-  unix: number;
-  window_low: number;
-  window_high: number;
-  net_gex: number;
-  gross_gex: number;
-  net_delta_notional: number;
-  gross_delta_notional: number;
-  net_charm_notional: number;
-  gross_charm_notional: number;
-  whole_net_gex: number;
-  whole_gross_gex: number;
-  whole_net_delta_notional: number;
-  whole_gross_delta_notional: number;
-  whole_net_charm_notional: number;
-  whole_gross_charm_notional: number;
-  key_gamma_strike?: number;
-  key_delta_strike?: number;
-  key_charm_strike?: number;
-  quality_flags: number;
-  source_unix: number;
-}
-
-export interface OptionStatsResponse extends OptionDataMeta {
-  product: OptionProduct;
-  scope: "0dte";
-  from: number;
-  to: number;
-  timeframe: number;
-  window_mode: "session_open_expected_move";
-  has_data: boolean;
-  points: OptionStatsPoint[];
-}
-
 // --- 10 月间价差 Term Spread & PCR ---
 
 export interface IvTermPoint {
@@ -591,20 +556,6 @@ export function getOptionVolumeHeatmap(
   return getOptionsApi<OptionVolumeHeatmapResponse>(
     "/api/options/volume-heatmap",
     { product, from, to },
-    signal,
-  );
-}
-
-export function getOptionStats(
-  product: OptionProduct,
-  from: number,
-  to: number,
-  timeframe: number,
-  signal?: AbortSignal,
-): Promise<OptionStatsResponse> {
-  return getOptionsApi<OptionStatsResponse>(
-    "/api/options/stats",
-    { product, from, to, timeframe },
     signal,
   );
 }

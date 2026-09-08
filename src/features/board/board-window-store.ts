@@ -2,8 +2,7 @@
 
 import { create } from "zustand";
 
-import type { OptionProduct, OptionScope, OptionStatsMetric } from "@/api/options";
-import { DEFAULT_OPTION_STATS_METRICS, sanitizeOptionStatsMetrics } from "./option-stats-model";
+import type { OptionProduct, OptionScope } from "@/api/options";
 import type { OptionVolumeHeatmapMetric, OptionVolumeHeatmapWindow } from "./option-volume-heatmap-model";
 
 /**
@@ -46,10 +45,6 @@ export interface WindowConfig {
   optionVolumeHeatmapVisible: boolean;
   optionVolumeHeatmapMetric: OptionVolumeHeatmapMetric;
   optionVolumeHeatmapWindow: OptionVolumeHeatmapWindow;
-  /** Rust Bar Statistics 风格的 0DTE 期权状态副图；旧布局默认未添加。 */
-  optionStatsEnabled: boolean;
-  optionStatsVisible: boolean;
-  optionStatsMetrics: OptionStatsMetric[];
   /** 主图 Volume 指标是否已添加、是否可见。 */
   volumeIndicatorEnabled: boolean;
   volumeIndicatorVisible: boolean;
@@ -165,9 +160,6 @@ interface BoardWindowState {
   setOptionVolumeHeatmapVisible: (id: string, visible: boolean) => void;
   setOptionVolumeHeatmapMetric: (id: string, metric: OptionVolumeHeatmapMetric) => void;
   setOptionVolumeHeatmapWindow: (id: string, window: OptionVolumeHeatmapWindow) => void;
-  setOptionStatsEnabled: (id: string, enabled: boolean) => void;
-  setOptionStatsVisible: (id: string, visible: boolean) => void;
-  toggleOptionStatsMetric: (id: string, metric: OptionStatsMetric) => void;
   /** 06 内嵌 VP 条带宽度（clamp 60~240） */
   setVpW: (id: string, w: number) => void;
   setOptionLayerEnabled: (id: string, enabled: boolean) => void;
@@ -211,9 +203,6 @@ function defaultWindowConfig(state: Pick<BoardWindowState, "master" | "perProduc
     optionVolumeHeatmapVisible: true,
     optionVolumeHeatmapMetric: "difference",
     optionVolumeHeatmapWindow: "1m",
-    optionStatsEnabled: false,
-    optionStatsVisible: true,
-    optionStatsMetrics: [...DEFAULT_OPTION_STATS_METRICS],
     volumeIndicatorEnabled: true,
     volumeIndicatorVisible: true,
     optionLayerEnabled: true,
@@ -292,9 +281,6 @@ function sanitizeWindows(
       optionVolumeHeatmapVisible: config.optionVolumeHeatmapVisible !== false,
       optionVolumeHeatmapMetric: (["difference", "total", "call", "put", "ratio"] as const).includes(config.optionVolumeHeatmapMetric) ? config.optionVolumeHeatmapMetric : "difference",
       optionVolumeHeatmapWindow: (["1m", "5m", "session"] as const).includes(config.optionVolumeHeatmapWindow) ? config.optionVolumeHeatmapWindow : "1m",
-      optionStatsEnabled: config.optionStatsEnabled === true,
-      optionStatsVisible: config.optionStatsVisible !== false,
-      optionStatsMetrics: sanitizeOptionStatsMetrics(config.optionStatsMetrics),
       volumeIndicatorEnabled: config.volumeIndicatorEnabled !== false,
       volumeIndicatorVisible: config.volumeIndicatorVisible !== false,
       // 旧档无 vpW 字段 → undefined（默认 200）；已有过窄值迁移到 120，最大 400
@@ -493,31 +479,6 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
   setOptionVolumeHeatmapWindow: (id, window) => {
     const state = get(), config = state.windows[id]; if (!config) return;
     set({ windows: { ...state.windows, [id]: { ...config, optionVolumeHeatmapWindow: window } } });
-  },
-
-  setOptionStatsEnabled: (id, enabled) => {
-    const state = get();
-    const config = state.windows[id];
-    if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, optionStatsEnabled: enabled, optionStatsVisible: enabled ? true : config.optionStatsVisible } } });
-  },
-
-  setOptionStatsVisible: (id, visible) => {
-    const state = get();
-    const config = state.windows[id];
-    if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, optionStatsVisible: visible } } });
-  },
-
-  toggleOptionStatsMetric: (id, metric) => {
-    const state = get();
-    const config = state.windows[id];
-    if (!config) return;
-    const current = sanitizeOptionStatsMetrics(config.optionStatsMetrics);
-    const metrics = current.includes(metric)
-      ? current.length === 1 ? current : current.filter((item) => item !== metric)
-      : DEFAULT_OPTION_STATS_METRICS.filter((item) => item === metric || current.includes(item));
-    set({ windows: { ...state.windows, [id]: { ...config, optionStatsMetrics: metrics } } });
   },
 
   setVpW: (id, w) => {

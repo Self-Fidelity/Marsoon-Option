@@ -19,6 +19,7 @@ CME 期货期权看板（ES/NQ/GC）。数据源：Barchart 免费源经本机 W
 > 2026-09-07（06 OHLC Legend）：OHLCV 悬浮读数固定在主图左上角，所有 indicator legend 从其下方开始纵向排列；小于 360px 时继续隐藏 OHLCV，indicator legend 回到 top-2。
 > 2026-09-07（06 OI/成交量 Profile）：原内嵌 GEX 剖面改为“期权 OI 分布”，实际画 Call/Put OI；原“期权成交量”改名“期权成交量分布”。两者每个 bin 的高度统一为一个真实 tick 经当前价格轴映射后的像素高度，最小 1px，缩放时自动变化。
 > 2026-09-07（公开文案边界）：错误、加载、等待和无数据状态不得暴露 Go/Databento/Barchart、内部域名或路径、HTTP 诊断、ticker/symbol/underlying/series id。`sanitizePublicData` 统一清洗 `/api/options/*` 浏览器响应；正常有数据视图仍可显示用户需要的品种与合约名称。
+> 2026-09-09（06 期权统计移除）：日内图不再提供期权 Stats 指标；前端入口、副图、模型、请求 Hook、同源 `/api/options/stats` 路由及窗口配置均已删除。后端原始接口未改动。
 > 2026-09-08（教学看板集成）：`/teaching` 为 Next.js/React 导航壳，默认首页，`?lesson=05`～`10` 切换对应课程；7 个自包含 React HTML 维护在 `public/teaching-content/`。旧 `public/teaching.html` 占位文件已删除。
 > 2026-09-09（用户留存）：全局 `ClientActivityReporter` 只在登录后/冷启动恢复和后台超过 30 分钟再前台时上报；pending UUID+user 写 localStorage 幂等重试。浏览器只发 event_id，Next `/api/auth/activity` 从 HttpOnly Cookie 取 Token 后代理 Go `/client/activity`，禁止客户端提交 user/date/time/token/邮箱或设备原始标识。
 

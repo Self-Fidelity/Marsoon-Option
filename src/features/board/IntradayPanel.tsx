@@ -7,7 +7,7 @@ import {
   type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 import { Check, Eye, EyeOff, Settings2, X } from "lucide-react";
-import { optionProductConfig, type IntradayBar, type OptionProduct, type OptionScope, type OptionStatsMetric, type OptionStatsResponse, type OptionsIntradayResponse } from "@/api/options";
+import { optionProductConfig, type IntradayBar, type OptionProduct, type OptionScope, type OptionsIntradayResponse } from "@/api/options";
 import { dataAvailabilityMessage } from "@/lib/data-messages";
 import { formatInteger, formatPrice } from "@/lib/formatters";
 import type { GexBreakdownModel } from "./gex-breakdown-model";
@@ -18,8 +18,6 @@ import { OptionVolumeProfilePrimitive } from "./lightweight-option-volume-profil
 import { OptionVolumeHeatmapPrimitive } from "./lightweight-option-volume-heatmap";
 import type { OptionVolumeProfileModel } from "./option-volume-profile-model";
 import type { OptionVolumeHeatmapMetric, OptionVolumeHeatmapModel, OptionVolumeHeatmapWindow } from "./option-volume-heatmap-model";
-import { buildOptionStatsModel, sanitizeOptionStatsMetrics } from "./option-stats-model";
-import { OptionStatsPane } from "./OptionStatsPane";
 import { useMeasureSize } from "./use-measure-size";
 
 const PERIODS = [{ minutes: 1, label: "1m" }, { minutes: 5, label: "5m" }, { minutes: 15, label: "15m" }, { minutes: 30, label: "30m" }, { minutes: 60, label: "1h" }];
@@ -50,7 +48,7 @@ interface Runtime {
 }
 export interface IntradayScopeResult { data?: OptionsIntradayResponse; isPending: boolean; isError: boolean }
 
-export function IntradayPanel({ product, scopes, layerScopes, results, minutes, onMinutesChange, levelLayerEnabled, onLevelLayerEnabled, levelLayerVisible, onLevelLayerVisible, volumeIndicatorEnabled, onVolumeIndicatorEnabled, volumeIndicatorVisible, onVolumeIndicatorVisible, levelsOn, onLevelsOn, vpOn, onVpEnabled, gexProfileVisible, onGexProfileVisible, profileScope, onProfileScopeChange, optionVolumeProfileEnabled, onOptionVolumeProfileEnabled, optionVolumeProfileVisible, onOptionVolumeProfileVisible, optionVolumeHeatmapEnabled, onOptionVolumeHeatmapEnabled, optionVolumeHeatmapVisible, onOptionVolumeHeatmapVisible, optionVolumeHeatmapMetric, onOptionVolumeHeatmapMetric, optionVolumeHeatmapWindow, onOptionVolumeHeatmapWindow, optionStatsEnabled, onOptionStatsEnabled, optionStatsVisible, onOptionStatsVisible, optionStatsMetrics, optionStatsResponse, onToggleLayerScope, historyDays, historyOffsetDays, onHistoryWindow, vpModel, optionVolumeModel, optionVolumeHeatmapModel, vpW, leadingControls }: {
+export function IntradayPanel({ product, scopes, layerScopes, results, minutes, onMinutesChange, levelLayerEnabled, onLevelLayerEnabled, levelLayerVisible, onLevelLayerVisible, volumeIndicatorEnabled, onVolumeIndicatorEnabled, volumeIndicatorVisible, onVolumeIndicatorVisible, levelsOn, onLevelsOn, vpOn, onVpEnabled, gexProfileVisible, onGexProfileVisible, profileScope, onProfileScopeChange, optionVolumeProfileEnabled, onOptionVolumeProfileEnabled, optionVolumeProfileVisible, onOptionVolumeProfileVisible, optionVolumeHeatmapEnabled, onOptionVolumeHeatmapEnabled, optionVolumeHeatmapVisible, onOptionVolumeHeatmapVisible, optionVolumeHeatmapMetric, onOptionVolumeHeatmapMetric, optionVolumeHeatmapWindow, onOptionVolumeHeatmapWindow, onToggleLayerScope, historyDays, historyOffsetDays, onHistoryWindow, vpModel, optionVolumeModel, optionVolumeHeatmapModel, vpW, leadingControls }: {
   product: OptionProduct; scopes: OptionScope[]; results: IntradayScopeResult[]; minutes: number; onMinutesChange: (value: number) => void;
   layerScopes: OptionScope[]; levelLayerEnabled: boolean; onLevelLayerEnabled: (enabled: boolean) => void;
   levelLayerVisible: boolean; onLevelLayerVisible: (visible: boolean) => void;
@@ -66,10 +64,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   optionVolumeHeatmapMetric: OptionVolumeHeatmapMetric; onOptionVolumeHeatmapMetric: (metric: OptionVolumeHeatmapMetric) => void;
   optionVolumeHeatmapWindow: OptionVolumeHeatmapWindow; onOptionVolumeHeatmapWindow: (window: OptionVolumeHeatmapWindow) => void;
   volumeProfileScope?: OptionScope; onVolumeProfileScopeChange?: (scope: OptionScope) => void;
-  optionStatsEnabled: boolean; onOptionStatsEnabled: (enabled: boolean) => void;
-  optionStatsVisible: boolean; onOptionStatsVisible: (visible: boolean) => void;
-  optionStatsMetrics?: OptionStatsMetric[];
-  optionStatsResponse?: OptionStatsResponse;
   onToggleLayerScope: (scope: OptionScope) => void;
   historyDays: 1 | 3 | 7; historyOffsetDays: number; onHistoryWindow: (days: 1 | 3 | 7, offsetDays: number) => void;
   vpModel?: GexBreakdownModel; optionVolumeModel?: OptionVolumeProfileModel; optionVolumeHeatmapModel?: OptionVolumeHeatmapModel; vpW?: number; leadingControls?: ReactNode;
@@ -97,9 +91,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   const layerSegments = useMemo(() => aligned.filter((segment) => layerScopes.includes(segment.scope)), [aligned, layerScopes]);
   const bars = useMemo(() => aggregateIntradayBars(source?.bars ?? [], minutes), [source?.bars, minutes]);
   const latestPrice = bars.at(-1)?.close;
-  const selectedStatsMetrics = useMemo(() => sanitizeOptionStatsMetrics(optionStatsMetrics), [optionStatsMetrics]);
-  const optionStatsModel = useMemo(() => buildOptionStatsModel(optionStatsResponse, bars), [optionStatsResponse, bars]);
-  const statsPaneVisible = optionStatsEnabled && optionStatsVisible;
   const levelsLayerVisible = levelLayerEnabled && levelLayerVisible;
   const positions = useMemo(
     () => levelsLayerVisible && levelsOn ? buildChartPositions(layerSegments, primary, symbol, latestPrice) : [],
@@ -310,15 +301,8 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       </div>
     </div>
   );
-  const statsLegend = (
-    <div className={`flex h-7 items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 font-mono text-[10px] ${optionStatsVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
-        <span className="mr-1 text-[var(--ms-text-primary)]">净 GEX · 0DTE</span>
-        <button type="button" aria-label={optionStatsVisible ? "隐藏期权统计" : "显示期权统计"} aria-pressed={optionStatsVisible} onClick={(event) => { event.stopPropagation(); onOptionStatsVisible(!optionStatsVisible); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{optionStatsVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-        <button type="button" aria-label="删除期权统计" onClick={() => onOptionStatsEnabled(false)} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
-    </div>
-  );
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--ms-plot-bg)]" data-chart-engine="lightweight-charts" data-chart-symbol={symbol ?? ""} data-bar-count={bars.length} data-position-count={positions.length} data-gex-row-count={profileVisible ? vpModel?.rows.length ?? 0 : 0} data-option-volume-row-count={optionVolumeVisible ? optionVolumeModel?.rows.length ?? 0 : 0} data-option-stats-point-count={statsPaneVisible ? optionStatsModel.points.size : 0} data-option-stats-pane={statsPaneVisible ? "visible" : "hidden"} data-option-stats-metrics={statsPaneVisible ? selectedStatsMetrics.join(",") : ""}>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--ms-plot-bg)]" data-chart-engine="lightweight-charts" data-chart-symbol={symbol ?? ""} data-bar-count={bars.length} data-position-count={positions.length} data-gex-row-count={profileVisible ? vpModel?.rows.length ?? 0 : 0} data-option-volume-row-count={optionVolumeVisible ? optionVolumeModel?.rows.length ?? 0 : 0}>
       <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-1.5 border-b border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-2.5 py-1.5">
         {leadingControls}
         <select aria-label="K线周期" className={button} value={minutes} onChange={(e) => onMinutesChange(Number(e.target.value))}>{PERIODS.map((p) => <option key={p.minutes} value={p.minutes}>{p.label}</option>)}</select>
@@ -329,7 +313,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
             <button type="button" disabled={vpOn} onClick={() => { onVpEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权 OI 分布</span>{vpOn ? <Check size={12} /> : <span>添加</span>}</button>
             <button type="button" disabled={optionVolumeProfileEnabled} onClick={() => { onOptionVolumeProfileEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权成交量分布</span>{optionVolumeProfileEnabled ? <Check size={12} /> : <span>添加</span>}</button>
             <button type="button" disabled={optionVolumeHeatmapEnabled} onClick={() => { onOptionVolumeHeatmapEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权成交热图</span>{optionVolumeHeatmapEnabled ? <Check size={12} /> : <span>添加</span>}</button>
-            <button type="button" disabled={optionStatsEnabled} onClick={() => { onOptionStatsEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权统计</span>{optionStatsEnabled ? <Check size={12} /> : <span>添加</span>}</button>
             <button type="button" disabled={levelLayerEnabled} onClick={() => { onLevelLayerEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权水位</span>{levelLayerEnabled ? <Check size={12} /> : <span>添加</span>}</button>
             <button type="button" disabled={volumeIndicatorEnabled} onClick={() => { onVolumeIndicatorEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>成交量</span>{volumeIndicatorEnabled ? <Check size={12} /> : <span>添加</span>}</button>
           </div> : null}
@@ -344,7 +327,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          <div ref={setHost} className="absolute inset-0" role="img" aria-label={`${instrumentName(symbol ?? product)} K线、期货成交量、期权成交量分布、期权 Stats 与期权价位`} />
+          <div ref={setHost} className="absolute inset-0" role="img" aria-label={`${instrumentName(symbol ?? product)} K线、期货成交量、期权成交量分布与期权价位`} />
           {readout && size.width >= 360 ? <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[calc(100%-1rem)] truncate rounded-[4px] bg-[color-mix(in_srgb,var(--ms-panel-bg)_88%,transparent)] px-1.5 py-1 font-mono text-[10px] tabular-nums text-[var(--ms-text-secondary)]" aria-live="off">
             <span>{clock.format(new Date(readout.unix * 1000))} CT　O {formatPrice(readout.open, tick)}　H {formatPrice(readout.high, tick)}　L {formatPrice(readout.low, tick)}　C {formatPrice(readout.close, tick)}　V {formatInteger(readout.volume)}</span>
           </div> : null}
@@ -410,7 +393,6 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
         </div> : null}
           {!bars.length && <div className="absolute inset-0 grid place-items-center bg-[var(--ms-plot-bg)] px-4 text-center text-sm text-[var(--ms-text-secondary)]">{pending ? "读取分钟K线中…" : failed ? "日内数据加载失败" : emptyNotice}</div>}
         </div>
-        {optionStatsEnabled ? <OptionStatsPane chart={chartApi} model={optionStatsModel} metrics={selectedStatsMetrics} visible={optionStatsVisible} legend={statsLegend} /> : null}
       </div>
     </div>
   );
