@@ -219,7 +219,12 @@ export function SmileWindow({ panelId }: { panelId: string }) {
   );
   const [selectedSeries, setSelectedSeries] = useState<Record<string, string>>({});
   const results = useOptionsChainMulti(product, scopes, selectedSeries);
-  const dashResults = useOptionsDashboardMulti(product, scopes);
+  const dashboardFallbackEnabled = results.map((result, index) => {
+    if (result.isPending) return false;
+    const data = result.data;
+    return !data || data.has_data === false || !buildChainSmileModel(data, product, scopes[index]!)?.points.length;
+  });
+  const dashResults = useOptionsDashboardMulti(product, scopes, dashboardFallbackEnabled);
   const models = useMemo(
     () =>
       scopes.map((scope, i) => {
@@ -235,7 +240,10 @@ export function SmileWindow({ panelId }: { panelId: string }) {
       }),
     [scopes, results, dashResults, product],
   );
-  const anyPending = results.every((r) => r.isPending) && dashResults.every((r) => r.isPending);
+  const anyPending = models.every((item) => !item.model) && (
+    results.some((result) => result.isPending) ||
+    dashResults.some((result, index) => dashboardFallbackEnabled[index] && result.isPending)
+  );
   // 真自适应（面板自适应规范）：flex 高度链 + overflow-hidden，07 精确填满窗口不出滚动条
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -455,7 +463,7 @@ export function SpreadWindow({ panelId }: { panelId: string }) {
     () => (config ? effectiveLineScopes(config, perProductScope) : ["d90" as OptionScope]),
     [config, perProductScope],
   );
-  const results = useOptionsTermMulti(product, scopes, view === "pcr");
+  const results = useOptionsTermMulti(product, view === "pcr" ? scopes : [], true);
   // 真自适应（面板自适应规范）：flex 高度链 + overflow-hidden，10 精确填满窗口不出滚动条
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
