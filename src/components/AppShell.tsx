@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 
 import { Sidebar } from "./Sidebar";
 import { SidebarToggleContext } from "./SidebarToggle";
+import { ClientActivityReporter } from "@/features/retention/ClientActivityReporter";
 
 const COLLAPSED_KEY = "marsoon-sidebar-collapsed";
 
@@ -34,6 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarToggleContext.Provider value={{ collapsed: effectiveCollapsed, toggle }}>
+      <ClientActivityReporter enabled={pathname !== "/login"} />
       <div className="flex min-h-screen bg-[var(--ms-app-bg)] text-[var(--ms-text-primary)]">
         <Sidebar collapsed={effectiveCollapsed} />
         <main className="min-w-0 flex-1 pb-16 lg:pb-0">{children}</main>
