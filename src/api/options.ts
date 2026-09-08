@@ -312,35 +312,6 @@ export interface OptionVolumeProfileResponse extends OptionDataMeta {
   rows: OptionVolumeProfileRow[];
 }
 
-export interface OptionVolumeHeatmapRow {
-  unix: number;
-  expiration: number;
-  strike: number;
-  call_buy_contracts: number;
-  call_sell_contracts: number;
-  call_unknown_contracts: number;
-  put_buy_contracts: number;
-  put_sell_contracts: number;
-  put_unknown_contracts: number;
-  call_trades: number;
-  put_trades: number;
-  source_unix: number;
-}
-
-export interface OptionVolumeHeatmapResponse extends OptionDataMeta {
-  product: OptionProduct;
-  scope: "0dte";
-  from: number;
-  to: number;
-  source_from: number;
-  source_to: number;
-  fallback: boolean;
-  fallback_days: number;
-  base_timeframe: 60;
-  has_data: boolean;
-  rows: OptionVolumeHeatmapRow[];
-}
-
 // --- 10 月间价差 Term Spread & PCR ---
 
 export interface IvTermPoint {
@@ -542,19 +513,6 @@ export function getOptionVolumeProfile(
 ): Promise<OptionVolumeProfileResponse> {
   return getOptionsApi<OptionVolumeProfileResponse>(
     "/api/options/volume-profile",
-    { product, from, to },
-    signal,
-  );
-}
-
-export function getOptionVolumeHeatmap(
-  product: OptionProduct,
-  from: number,
-  to: number,
-  signal?: AbortSignal,
-): Promise<OptionVolumeHeatmapResponse> {
-  return getOptionsApi<OptionVolumeHeatmapResponse>(
-    "/api/options/volume-heatmap",
     { product, from, to },
     signal,
   );

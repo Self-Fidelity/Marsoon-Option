@@ -18,7 +18,6 @@ import {
 import { useOptionsChain, useOptionsChainMulti } from "@/features/options/use-options-chain";
 import { useOptionsCandleStream, useOptionsIntradayBars, useOptionsIntradayMulti } from "@/features/options/use-options-intraday";
 import { useOptionVolumeProfile } from "@/features/options/use-option-volume-profile";
-import { useOptionVolumeHeatmap } from "@/features/options/use-option-volume-heatmap";
 import { useOptionsTermMulti } from "@/features/options/use-options-term";
 
 import {
@@ -30,7 +29,6 @@ import { buildGexBreakdownModel } from "./gex-breakdown-model";
 import { GexBreakdownPanel } from "./GexBreakdownPanel";
 import { IntradayPanel } from "./IntradayPanel";
 import { buildOptionVolumeProfileModel } from "./option-volume-profile-model";
-import { buildOptionVolumeHeatmapModel } from "./option-volume-heatmap-model";
 import { buildOptionsChainModel } from "./options-chain-model";
 import { OptionsChainPanel } from "./OptionsChainPanel";
 import { buildOverviewModel } from "./overview-model";
@@ -282,10 +280,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const gexProfileVisible = config?.gexProfileVisible !== false;
   const optionVolumeProfileEnabled = config?.optionVolumeProfileEnabled !== false;
   const optionVolumeProfileVisible = config?.optionVolumeProfileVisible !== false;
-  const optionVolumeHeatmapEnabled = config?.optionVolumeHeatmapEnabled === true;
-  const optionVolumeHeatmapVisible = config?.optionVolumeHeatmapVisible !== false;
-  const optionVolumeHeatmapMetric = config?.optionVolumeHeatmapMetric ?? "difference";
-  const optionVolumeHeatmapWindow = config?.optionVolumeHeatmapWindow ?? "1m";
   const profileScope = config?.gexProfileScope === "close" ? "close" : "0dte";
   const volumeProfileScope = config?.optionVolumeProfileScope === "close" ? "close" : "0dte";
   const scopes = useMemo(
@@ -302,10 +296,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const setOptionVolumeProfileEnabled = useBoardWindowStore((s) => s.setOptionVolumeProfileEnabled);
   const setOptionVolumeProfileVisible = useBoardWindowStore((s) => s.setOptionVolumeProfileVisible);
   const setOptionVolumeProfileScope = useBoardWindowStore((s) => s.setOptionVolumeProfileScope);
-  const setOptionVolumeHeatmapEnabled = useBoardWindowStore((s) => s.setOptionVolumeHeatmapEnabled);
-  const setOptionVolumeHeatmapVisible = useBoardWindowStore((s) => s.setOptionVolumeHeatmapVisible);
-  const setOptionVolumeHeatmapMetric = useBoardWindowStore((s) => s.setOptionVolumeHeatmapMetric);
-  const setOptionVolumeHeatmapWindow = useBoardWindowStore((s) => s.setOptionVolumeHeatmapWindow);
   const setVolumeIndicatorEnabled = useBoardWindowStore((s) => s.setVolumeIndicatorEnabled);
   const setVolumeIndicatorVisible = useBoardWindowStore((s) => s.setVolumeIndicatorVisible);
   const toggleOptionLayerScope = useBoardWindowStore((s) => s.toggleOptionLayerScope);
@@ -363,7 +353,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
     return first && last ? { from: first, to: last + 60 } : undefined;
   }, [volumeProfileScope, barsSource?.bars]);
   const optionVolumeQuery = useOptionVolumeProfile(product, optionVolumeRange?.from, optionVolumeRange?.to, optionVolumeProfileEnabled && optionVolumeProfileVisible);
-  const optionVolumeHeatmapQuery = useOptionVolumeHeatmap(product, optionVolumeRange?.from, optionVolumeRange?.to, optionVolumeHeatmapEnabled && optionVolumeHeatmapVisible);
   const vpModel = useMemo(() => {
     if (!vpQuery.data || vpQuery.data.has_data === false || (!vpQuery.data.portfolio && !sameUnderlying(vpQuery.data.market_state?.underlying_symbol, barSymbol))) return undefined;
     return buildGexBreakdownModel(buildDashboardViewModel(vpQuery.data, profileScope));
@@ -374,12 +363,6 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
     const model = buildOptionVolumeProfileModel(data);
     return model.rows.length ? model : undefined;
   }, [optionVolumeQuery.data]);
-  const optionVolumeHeatmapModel = useMemo(() => {
-    const data = optionVolumeHeatmapQuery.data;
-    if (!data?.has_data) return undefined;
-    const model = buildOptionVolumeHeatmapModel(data, optionVolumeHeatmapMetric, optionVolumeHeatmapWindow);
-    return model.cells.length ? model : undefined;
-  }, [optionVolumeHeatmapQuery.data, optionVolumeHeatmapMetric, optionVolumeHeatmapWindow]);
   return (
     // 真自适应（第十九轮）：flex 高度链 + overflow-hidden，06 面板精确填满窗口、不出滚动条
     // 布局极致简约化 C：WindowToolbar 外壳不再单列一行，控件本体注入 IntradayPanel 与图表工具控件并单行
@@ -412,18 +395,9 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
           onOptionVolumeProfileEnabled={(enabled) => setOptionVolumeProfileEnabled(panelId, enabled)}
           optionVolumeProfileVisible={optionVolumeProfileVisible}
           onOptionVolumeProfileVisible={(visible) => setOptionVolumeProfileVisible(panelId, visible)}
-          optionVolumeHeatmapEnabled={optionVolumeHeatmapEnabled}
-          onOptionVolumeHeatmapEnabled={(enabled) => setOptionVolumeHeatmapEnabled(panelId, enabled)}
-          optionVolumeHeatmapVisible={optionVolumeHeatmapVisible}
-          onOptionVolumeHeatmapVisible={(visible) => setOptionVolumeHeatmapVisible(panelId, visible)}
-          optionVolumeHeatmapMetric={optionVolumeHeatmapMetric}
-          onOptionVolumeHeatmapMetric={(metric) => setOptionVolumeHeatmapMetric(panelId, metric)}
-          optionVolumeHeatmapWindow={optionVolumeHeatmapWindow}
-          onOptionVolumeHeatmapWindow={(window) => setOptionVolumeHeatmapWindow(panelId, window)}
           volumeProfileScope={volumeProfileScope}
           onVolumeProfileScopeChange={(scope) => setOptionVolumeProfileScope(panelId, scope)}
           optionVolumeModel={optionVolumeModel}
-          optionVolumeHeatmapModel={optionVolumeHeatmapModel}
           onToggleLayerScope={(scope) => toggleOptionLayerScope(panelId, scope)}
           historyDays={historyDays}
           historyOffsetDays={historyOffsetDays}

@@ -3,7 +3,6 @@
 import { create } from "zustand";
 
 import type { OptionProduct, OptionScope } from "@/api/options";
-import type { OptionVolumeHeatmapMetric, OptionVolumeHeatmapWindow } from "./option-volume-heatmap-model";
 
 /**
  * 窗口配置 store（看板架构演进 步二后半 + 一·五节三维联动模型）。
@@ -41,10 +40,6 @@ export interface WindowConfig {
   optionVolumeProfileEnabled: boolean;
   optionVolumeProfileVisible: boolean;
   optionVolumeProfileScope: OptionScope;
-  optionVolumeHeatmapEnabled: boolean;
-  optionVolumeHeatmapVisible: boolean;
-  optionVolumeHeatmapMetric: OptionVolumeHeatmapMetric;
-  optionVolumeHeatmapWindow: OptionVolumeHeatmapWindow;
   /** 主图 Volume 指标是否已添加、是否可见。 */
   volumeIndicatorEnabled: boolean;
   volumeIndicatorVisible: boolean;
@@ -156,10 +151,6 @@ interface BoardWindowState {
   setOptionVolumeProfileEnabled: (id: string, enabled: boolean) => void;
   setOptionVolumeProfileVisible: (id: string, visible: boolean) => void;
   setOptionVolumeProfileScope: (id: string, scope: OptionScope) => void;
-  setOptionVolumeHeatmapEnabled: (id: string, enabled: boolean) => void;
-  setOptionVolumeHeatmapVisible: (id: string, visible: boolean) => void;
-  setOptionVolumeHeatmapMetric: (id: string, metric: OptionVolumeHeatmapMetric) => void;
-  setOptionVolumeHeatmapWindow: (id: string, window: OptionVolumeHeatmapWindow) => void;
   /** 06 内嵌 VP 条带宽度（clamp 60~240） */
   setVpW: (id: string, w: number) => void;
   setOptionLayerEnabled: (id: string, enabled: boolean) => void;
@@ -199,10 +190,6 @@ function defaultWindowConfig(state: Pick<BoardWindowState, "master" | "perProduc
     optionVolumeProfileEnabled: true,
     optionVolumeProfileVisible: true,
     optionVolumeProfileScope: "0dte",
-    optionVolumeHeatmapEnabled: false,
-    optionVolumeHeatmapVisible: true,
-    optionVolumeHeatmapMetric: "difference",
-    optionVolumeHeatmapWindow: "1m",
     volumeIndicatorEnabled: true,
     volumeIndicatorVisible: true,
     optionLayerEnabled: true,
@@ -277,10 +264,6 @@ function sanitizeWindows(
       optionVolumeProfileEnabled: config.optionVolumeProfileEnabled !== false,
       optionVolumeProfileVisible: config.optionVolumeProfileVisible !== false,
       optionVolumeProfileScope: config.optionVolumeProfileScope === "close" ? "close" : "0dte",
-      optionVolumeHeatmapEnabled: config.optionVolumeHeatmapEnabled === true,
-      optionVolumeHeatmapVisible: config.optionVolumeHeatmapVisible !== false,
-      optionVolumeHeatmapMetric: (["difference", "total", "call", "put", "ratio"] as const).includes(config.optionVolumeHeatmapMetric) ? config.optionVolumeHeatmapMetric : "difference",
-      optionVolumeHeatmapWindow: (["1m", "5m", "session"] as const).includes(config.optionVolumeHeatmapWindow) ? config.optionVolumeHeatmapWindow : "1m",
       volumeIndicatorEnabled: config.volumeIndicatorEnabled !== false,
       volumeIndicatorVisible: config.volumeIndicatorVisible !== false,
       // 旧档无 vpW 字段 → undefined（默认 200）；已有过窄值迁移到 120，最大 400
@@ -464,23 +447,6 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     if (!config) return;
     set({ windows: { ...state.windows, [id]: { ...config, optionVolumeProfileScope: scope === "close" ? "close" : "0dte" } } });
   },
-  setOptionVolumeHeatmapEnabled: (id, enabled) => {
-    const state = get(), config = state.windows[id]; if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, optionVolumeHeatmapEnabled: enabled, optionVolumeHeatmapVisible: enabled ? true : config.optionVolumeHeatmapVisible } } });
-  },
-  setOptionVolumeHeatmapVisible: (id, visible) => {
-    const state = get(), config = state.windows[id]; if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, optionVolumeHeatmapVisible: visible } } });
-  },
-  setOptionVolumeHeatmapMetric: (id, metric) => {
-    const state = get(), config = state.windows[id]; if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, optionVolumeHeatmapMetric: metric } } });
-  },
-  setOptionVolumeHeatmapWindow: (id, window) => {
-    const state = get(), config = state.windows[id]; if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, optionVolumeHeatmapWindow: window } } });
-  },
-
   setVpW: (id, w) => {
     const state = get();
     const config = state.windows[id];

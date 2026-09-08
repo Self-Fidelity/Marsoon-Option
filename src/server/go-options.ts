@@ -345,59 +345,6 @@ export async function optionVolumeProfile(request: Request) {
   };
 }
 
-export async function optionVolumeHeatmap(request: Request) {
-  const { product, query } = params(request);
-  const from = Number(query.get("from"));
-  const to = Number(query.get("to"));
-  if (![from, to].every(Number.isSafeInteger) || from <= 0 || to <= from || to - from > 7 * 86400) {
-    throw new GoOptionsError("期权成交热图时间范围无效", 400);
-  }
-  const live = await latestSnapshot(product, "0dte");
-  const empty = {
-    product, scope: "0dte" as const, from, to, source_from: from, source_to: to,
-    fallback: false, fallback_days: 0, base_timeframe: 60 as const,
-    underlying_symbol: live?.underlying, has_data: false, rows: [],
-  };
-  if (!live?.underlying) return empty;
-  const read = async (rangeFrom: number, rangeTo: number) => {
-    const raw = object(await unavailableEndpoint("/options/0dte-volume-profile", {
-      product, from: rangeFrom, to: rangeTo, underlying: live.underlying, strict_underlying: "true",
-    }, { rows: [] }));
-    return list(raw.rows ?? []);
-  };
-  let rows: Row[] = [];
-  let sourceFrom = from, sourceTo = to, fallbackDays = 0, fallback = false;
-  try { rows = await read(from, to); } catch { return empty; }
-  if (!rows.length && live.snap) {
-    fallback = true; sourceFrom = live.snap - 86400; sourceTo = live.snap + 3600;
-    rows = await read(sourceFrom, sourceTo);
-  }
-  if (!rows.length) {
-    fallback = true;
-    const baseDay = cmeTradingDayAt((live.snap ?? to) - 1);
-    for (let offset = 0; offset <= 7; offset++) {
-      const day = shiftDay(baseDay, -offset), nextDay = shiftDay(day, 1);
-      sourceFrom = sessionStart(day); sourceTo = sessionStart(nextDay);
-      rows = await read(sourceFrom, sourceTo);
-      if (rows.length) { fallbackDays = offset; break; }
-    }
-  }
-  const numeric = [
-    "call_buy_contracts", "call_sell_contracts", "call_unknown_contracts",
-    "put_buy_contracts", "put_sell_contracts", "put_unknown_contracts",
-    "call_trades", "put_trades",
-  ] as const;
-  const clean = rows.flatMap((row) => {
-    const unix = number(row.unix), expiration = number(row.expiration), strike = number(row.strike);
-    if (unix === null || expiration === null || strike === null || !Number.isSafeInteger(unix) || unix % 60 || strike <= 0) return [];
-    const values = Object.fromEntries(numeric.map((key) => [key, Math.max(0, number(row[key]) ?? 0)]));
-    return [{ unix, expiration, strike, source_unix: number(row.source_unix) ?? unix, ...values }];
-  });
-  return {
-    ...empty, source_from: sourceFrom, source_to: sourceTo, fallback, fallback_days: fallbackDays,
-    has_data: clean.length > 0, rows: clean,
-  };
-}
 export async function chain(request: Request) {
   const { product, scope, query } = params(request);
   const expirationRaw = Number(query.get("expiration"));
