@@ -1,12 +1,35 @@
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 
-import {
-  ChainWindow,
-  ExpirationWindow,
-  IntradayWindow,
-  SmileWindow,
-  SpreadWindow,
-} from "./panel-wrappers";
+/**
+ * 面板懒加载（2026-09-12 首载节流）：五个窗口整体进异步 chunk，
+ * 首载不随 /board 同步下载（lightweight-charts 104KB gz 为最大头）；
+ * 出厂布局首窗挂载时按序加载，骨架屏无感。窗口组件签名统一 (panelId, visible)。
+ */
+const panelFallback = (
+  <div className="h-full w-full animate-pulse rounded-[10px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)]" />
+);
+
+const ExpirationWindow = dynamic(
+  () => import("./panel-wrappers").then((m) => m.ExpirationWindow),
+  { ssr: false, loading: () => panelFallback },
+);
+const IntradayWindow = dynamic(
+  () => import("./panel-wrappers").then((m) => m.IntradayWindow),
+  { ssr: false, loading: () => panelFallback },
+);
+const SmileWindow = dynamic(
+  () => import("./panel-wrappers").then((m) => m.SmileWindow),
+  { ssr: false, loading: () => panelFallback },
+);
+const ChainWindow = dynamic(
+  () => import("./panel-wrappers").then((m) => m.ChainWindow),
+  { ssr: false, loading: () => panelFallback },
+);
+const SpreadWindow = dynamic(
+  () => import("./panel-wrappers").then((m) => m.SpreadWindow),
+  { ssr: false, loading: () => panelFallback },
+);
 
 /**
  * 面板注册表：每窗三要素自包含——render 只收 panelId，
