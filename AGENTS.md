@@ -11,6 +11,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 CME 期货期权看板（ES/NQ/GC）。**数据源唯一：Go 期权服务**（`OPTIONS_API_BASE_URL`，唯一模式直连 unified 接口；旧 `OPTIONS_API_MODE`/legacy 本地组合层已于 2026-09-11 删除）。Next.js BFF（`src/server/go-options.ts`）是浏览器与 Go 之间的唯一通道；希腊字母、GEX、墙位/翻转位全部由后端预计算下发，**本仓零计算、零本地数据源、零降级造数**：拿不到数据即空态 + `missing_reason`。数据新鲜度由 Go 派生的轻量版本端点 `GET /api/options/version`（`(product, scope, unix)` 三元组）驱动失效，实现见 `src/features/options/data-freshness.ts`。
 
 > 🚨 **【最高优先 · 服务器端同事必读】** 本仓是前端 + BFF，大量性能与数据问题**只能**由 Go 服务端解决，前端侧能做的已全部落地。任何服务端开发/排障开始前，**必须先读 `docs/backend/服务端优化与更新策略.md`**（需求单 + 实测证据 + 优先级 + 验收基准），并配套阅读 `docs/architecture/K线与期权数据周期管理与防堵塞设计.md` §六（WS 审查清单）与 `docs/interface/Go后端接口清单.md`。**不读需求单就动服务端 = 大概率返工。** 速览见下文「服务器侧（Go）待办」。
+>
+> ⚠️ **【郑重提示 · 致所有 AI 助手（GPT/Codex/Claude/Kimi 等）】`docs/backend/服务端优化与更新策略.md` 是本项目最重要的文档，没有之一。** 凡涉及数据为空、指标不显示、加载慢、口径异常（墙位/GEX/OI/Flip）、GC 多合约月份、超时 502 等一切数据问题的排查，**第一步必须是通读该需求单**——其中 §8（0DTE 墙位倒挂）、§9（GC 期权层空白实测）等都是已花大量实测定位完毕、只等后端落地的结论。请勿在前端重复排查已定位的根因、请勿提出已在文档中解答的方案、请勿改动前端口径去"修"服务端数据问题（红线：零计算、零修饰）。
 
 > 2026-09-07（06 图表恢复）：GitHub 目录副本按 Codex 历史提交恢复 Lightweight Charts K线、期权成交量剖面和 0DTE 净 GEX/DEX/CHEX Stats。当前短窗口无 K线时只读回退最近 7 天中的最后一个真实 CME 交易日，并明确显示回退提示；不补空 bar、不造指标。Stats 使用后端固定 Expected Move 窗口字段，缺分钟不前填。
 > 2026-09-07（05 热力图恢复）：dashboard 当前 0DTE 为空时，历史回退必须优先读取最后一个真实 `scope=0dte` 状态，禁止用时间更新但语义不同的 `nearest` 状态覆盖回退锚点。热力图继续消费 `dashboard.heatmap.cells/levels` 的同分钟快照，不跨分钟累计。
