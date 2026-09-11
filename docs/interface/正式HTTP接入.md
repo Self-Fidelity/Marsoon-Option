@@ -15,15 +15,15 @@
 - BFF = `src/server/go-options.ts`（`upstream()`）：按接口分级超时、10s 进程内 LRU 缓存、统一错误清洗。
 - 唯一模式直连 Go 只读接口（2026-09-11 起 `OPTIONS_API_MODE`/legacy 本地合成分支已删除，`options-live-model.ts` 一并移除；空态一律由 Go 的 `has_data`/`missing_reason` 裁决）。
 
-## 2. 接口 × 面板 × 状态（2026-09-10 实测）
+## 2. 接口 × 面板 × 状态（2026-09-10 实测；2026-09-12 修订面板清单）
 
 | 面板 / 用途 | 前端入口 | 后端接口 | 状态 |
 |---|---|---|---|
-| 01 总览 | `/api/options/dashboard` | `/options/dashboard` | ✅ 有数据 |
+| ~~01 总览~~ | — | — | **面板已删**（2026-09-11 收敛，文档留档） |
 | 05 到期热力图 | 同上（读 `heatmap.cells`） | `/options/dashboard` | ✅ 0DTE 361 cells / d90 1894 |
-| 06 日内变化 | `/api/options/intraday` | `/options/intraday` + `/options/underlying-bars` | ✅ K线 1380 根 + levels 1315 条 |
+| 06 日内变化 | `/api/options/intraday` | `/options/intraday` + `/options/underlying-bars` | ✅ K线 1380 根（levels 轨迹 2026-09-12 起 BFF 裁剪，已无消费方） |
 | 07 微笑偏斜 | `/api/options/dashboard`、`chain` | `/options/dashboard` | ✅ cells 带 `call_iv` / `put_iv` |
-| 08 GEX 拆分 | `/api/options/dashboard` | `/options/dashboard` | ✅ |
+| ~~08 GEX 拆分~~ | — | — | **面板已删**（2026-09-11；Exposure 剖面迁入 06 副图） |
 | 09 期权链 | `/api/options/chain` | `/options/chain` | ✅ 376 档；`last`/`oi`/`volume` 多为 null |
 | 10 月间价差 · PCR | `/api/options/term` | `/options/term` | ✅ 7 个到期点；`iv_official` 恒 null |
 | IV 期限（历史） | `/api/options/iv-term?date=` | `/options/dashboard?asof=` | ✅ 走历史快照 |
@@ -31,7 +31,7 @@
 | 0DTE 成交量分布 | `/api/options/volume-profile` | `/options/0dte-volume-profile` | ✅ 区间大时超时 |
 | 全站数据状态 | `/api/options/status` | `/options/status` | ✅ |
 | 实时 K 线 | `/api/auth/candles-ws` 换票 | `wss://…/ws?token=` | 未实测 |
-| 收盘档（close） | 同 01 / 05 | `/options/dashboard?scope=close` | ⚠️ `state: partial`，多数空态 |
+| 收盘档（close） | `/api/options/dashboard?scope=close` | 同左（BFF 2026-09-11 已放行直连 Go） | ⚠️ 有 200 与数据（GC 772KB / ES·NQ 905KB 级）；无压缩慢传是主要矛盾，见服务端需求单 §9/§10 |
 
 ## 3. 周期（scope）映射
 
