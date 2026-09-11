@@ -9,8 +9,11 @@ import {
 import { Check, Eye, EyeOff, Settings2, X } from "lucide-react";
 import { optionProductConfig, type IntradayBar, type OptionProduct, type OptionScope, type OptionsIntradayResponse } from "@/api/options";
 import { dataAvailabilityMessage } from "@/lib/data-messages";
+import { cmeTradingDayKey, sessionStart } from "@/lib/cme-session";
 import { formatInteger, formatPrice } from "@/lib/formatters";
 import type { GexBreakdownModel } from "./gex-breakdown-model";
+import { ExposureProfilePane } from "./ExposureProfilePane";
+import type { ExposureProfileModel } from "./exposure-profile-model";
 import { candleUnderlying, pickIntradayBars, sameUnderlying } from "./intraday-data";
 import { INTRADAY_SCOPES, aggregateIntradayBars, buildChartPositions, tailUpdateStart, preserveLogicalRange } from "./lightweight-model";
 import { OptionOiProfilePrimitive } from "./lightweight-gex-profile";
@@ -21,8 +24,9 @@ import { useMeasureSize } from "./use-measure-size";
 const PERIODS = [{ minutes: 1, label: "1m" }, { minutes: 5, label: "5m" }, { minutes: 15, label: "15m" }, { minutes: 30, label: "30m" }, { minutes: 60, label: "1h" }];
 const PREFIX: Record<OptionScope, string> = { "0dte": "0DTE", d30: "30DTE", d90: "90DTE", close: "EOD" };
 const LEGEND_PREFIX: Record<OptionScope, string> = { "0dte": "0DTE", d30: "30DTE", d90: "90DTE", close: "前日EOD" };
-const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-const date = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Chicago", month: "2-digit", day: "2-digit" });
+// 06 时间轴/读数一律用美东（America/New_York，后缀 ET）：用户口径 2026-09-11，CT 不习惯。
+const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const date = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", month: "2-digit", day: "2-digit" });
 function timeDate(time: Time): Date { return typeof time === "number" ? new Date(time * 1000) : typeof time === "string" ? new Date(time) : new Date(Date.UTC(time.year, time.month - 1, time.day)); }
 function chartColors(node: HTMLElement) {
   const style = getComputedStyle(node), color = (name: string) => style.getPropertyValue(name).trim();
@@ -30,6 +34,16 @@ function chartColors(node: HTMLElement) {
 }
 type Colors = ReturnType<typeof chartColors>;
 type PriceSeries = ISeriesApi<"Candlestick"> | ISeriesApi<"Line">;
+
+/**
+ * 默认视野 = 当前 CME 交易日完整时段（开盘 17:00 CT / 18:00 ET → 收盘 16:00 CT / 17:00 ET）。
+ * 用户口径（2026-09-11）：每次展示的 K 线都是开盘到收盘，右侧未开盘段留白。
+ */
+function fitSession(chart: IChartApi) {
+  const open = sessionStart(cmeTradingDayKey());
+  chart.priceScale("right").setAutoScale(true);
+  chart.timeScale().setVisibleRange({ from: open as UTCTimestamp, to: (open + 23 * 3600) as UTCTimestamp });
+}
 interface Runtime {
   chart: IChartApi;
   candles: ISeriesApi<"Candlestick">;
@@ -45,7 +59,7 @@ interface Runtime {
 }
 export interface IntradayScopeResult { data?: OptionsIntradayResponse; isPending: boolean; isError: boolean }
 
-export function IntradayPanel({ product, scopes, layerScopes, results, minutes, onMinutesChange, levelLayerEnabled, onLevelLayerEnabled, levelLayerVisible, onLevelLayerVisible, volumeIndicatorEnabled, onVolumeIndicatorEnabled, volumeIndicatorVisible, onVolumeIndicatorVisible, levelsOn, onLevelsOn, vpOn, onVpEnabled, gexProfileVisible, onGexProfileVisible, profileScope, onProfileScopeChange, optionVolumeProfileEnabled, onOptionVolumeProfileEnabled, optionVolumeProfileVisible, onOptionVolumeProfileVisible, onToggleLayerScope, historyDays, historyOffsetDays, onHistoryWindow, vpModel, optionVolumeModel, vpW, leadingControls }: {
+export function IntradayPanel({ product, scopes, layerScopes, results, minutes, onMinutesChange, levelLayerEnabled, onLevelLayerEnabled, levelLayerVisible, onLevelLayerVisible, volumeIndicatorEnabled, onVolumeIndicatorEnabled, volumeIndicatorVisible, onVolumeIndicatorVisible, levelsOn, onLevelsOn, vpOn, onVpEnabled, gexProfileVisible, onGexProfileVisible, profileScope, onProfileScopeChange, optionVolumeProfileEnabled, onOptionVolumeProfileEnabled, optionVolumeProfileVisible, onOptionVolumeProfileVisible, onToggleLayerScope, historyDays, historyOffsetDays, onHistoryWindow, vpModel, optionVolumeModel, vpW, leadingControls, exposureProfileEnabled, onExposureProfileEnabled, exposureProfileVisible, onExposureProfileVisible, exposureScope, onExposureScopeChange, exposureModel }: {
   product: OptionProduct; scopes: OptionScope[]; results: IntradayScopeResult[]; minutes: number; onMinutesChange: (value: number) => void;
   layerScopes: OptionScope[]; levelLayerEnabled: boolean; onLevelLayerEnabled: (enabled: boolean) => void;
   levelLayerVisible: boolean; onLevelLayerVisible: (visible: boolean) => void;
@@ -60,12 +74,17 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   onToggleLayerScope: (scope: OptionScope) => void;
   historyDays: 1 | 3 | 7; historyOffsetDays: number; onHistoryWindow: (days: 1 | 3 | 7, offsetDays: number) => void;
   vpModel?: GexBreakdownModel; optionVolumeModel?: OptionVolumeProfileModel; vpW?: number; leadingControls?: ReactNode;
+  exposureProfileEnabled: boolean; onExposureProfileEnabled: (enabled: boolean) => void;
+  exposureProfileVisible: boolean; onExposureProfileVisible: (visible: boolean) => void;
+  exposureScope: OptionScope; onExposureScopeChange: (scope: OptionScope) => void;
+  exposureModel?: ExposureProfileModel;
 }) {
   const [mode, setMode] = useState<"candles" | "line">("candles");
   const [legendsCollapsed, setLegendsCollapsed] = useState(false);
   const legendListId = useId();
   const [levelSettingsOpen, setLevelSettingsOpen] = useState(false);
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
+  const [exposureSettingsOpen, setExposureSettingsOpen] = useState(false);
   const [indicatorMenuOpen, setIndicatorMenuOpen] = useState(false);
   const [hovered, setHovered] = useState<IntradayBar | null>(null);
   const [chartApi, setChartApi] = useState<IChartApi | null>(null);
@@ -73,6 +92,14 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   const runtime = useRef<Runtime | null>(null);
   const legendRef = useRef<HTMLDivElement | null>(null);
   const barsByTime = useRef(new Map<number, IntradayBar>());
+  /**
+   * 空态遮罩守卫（2026-09-10）：遮罩是不透明的（bg-[var(--ms-plot-bg)]，整块盖住绘图区），
+   * 一旦 bars 因为重新取数、切换窗口或上游抖动而瞬时为空，用户看到的就是"画面黑一段时间"。
+   * 只在"从未渲染过任何 K 线"时才允许出现遮罩；已经画过图就保留最后一帧，
+   * 由数据自己补上来（chart 内容不会因为 React 侧 bars 为空而消失）。
+   */
+  const renderedOnce = useRef(false);
+  const [barsEverRendered, setBarsEverRendered] = useState(false);
   const [measureRef, size] = useMeasureSize<HTMLDivElement>();
   const setHost = useCallback((node: HTMLDivElement | null) => { measureRef(node); setChartHost(node); }, [measureRef]);
   const primary = useMemo(() => INTRADAY_SCOPES.find((scope) => layerScopes.includes(scope)) ?? "0dte", [layerScopes]);
@@ -112,17 +139,19 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
   );
 
   useEffect(() => {
-    if (!profileSettingsOpen && !levelSettingsOpen) return;
+    if (!profileSettingsOpen && !levelSettingsOpen && !exposureSettingsOpen) return;
     const closeOutside = (event: PointerEvent) => {
       if (!legendRef.current?.contains(event.target as Node)) {
         setProfileSettingsOpen(false);
         setLevelSettingsOpen(false);
+        setExposureSettingsOpen(false);
       }
     };
     const closeEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setProfileSettingsOpen(false);
         setLevelSettingsOpen(false);
+        setExposureSettingsOpen(false);
       }
     };
     document.addEventListener("pointerdown", closeOutside, true);
@@ -131,7 +160,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       document.removeEventListener("pointerdown", closeOutside, true);
       document.removeEventListener("keydown", closeEscape);
     };
-  }, [profileSettingsOpen, levelSettingsOpen]);
+  }, [profileSettingsOpen, levelSettingsOpen, exposureSettingsOpen]);
 
   // One chart per mounted panel. StrictMode/unmount destroys its canvas and listeners.
   useEffect(() => {
@@ -146,7 +175,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
       rightPriceScale: { borderColor: colors.border, scaleMargins: { top: .1, bottom: .1 } },
       timeScale: { timeVisible: true, secondsVisible: false, borderColor: colors.border, rightOffsetPixels: 16, minBarSpacing: .5,
         tickMarkFormatter: (time: Time, kind: TickMarkType) => kind === TickMarkType.Year || kind === TickMarkType.Month || kind === TickMarkType.DayOfMonth ? date.format(timeDate(time)) : clock.format(timeDate(time)) },
-      localization: { locale: "en-US", timeFormatter: (time: Time) => `${date.format(timeDate(time))} ${clock.format(timeDate(time))} CT` },
+      localization: { locale: "en-US", timeFormatter: (time: Time) => `${date.format(timeDate(time))} ${clock.format(timeDate(time))} ET` },
       handleScroll: true, handleScale: true,
     });
     const candles = chart.addSeries(CandlestickSeries, {
@@ -189,9 +218,15 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
 
   useEffect(() => {
     const rt = runtime.current; if (!rt) return;
-    const key = `${symbol ?? product}:${minutes}:${source?.day ?? ""}`;
-    const reset = rt.key !== key || !rt.bars.length;
-    const visible = rt.chart.timeScale().getVisibleLogicalRange();
+    // day 维度用 CME 交易日（17:00 CT 换日），不用 BFF 的 UTC 日期——后者在 UTC 00:00
+    // （CT 18:00/19:00，晚盘交易中）突变，会盘中强制重置用户缩放平移。
+    const key = `${symbol ?? product}:${minutes}:${cmeTradingDayKey()}`;
+    const prevKey = rt.key;
+    const hadBars = rt.bars.length > 0;
+    const reset = prevKey !== key || !hadBars;
+    const visibleLogical = rt.chart.timeScale().getVisibleLogicalRange();
+    // reset 前抓时间域视野：整体重灌后按"同一时钟窗口"恢复，位置不再跳动（2026-09-11）
+    const visibleTime = hadBars ? rt.chart.timeScale().getVisibleRange() : null;
     const updateFrom = !reset ? tailUpdateStart(rt.bars, bars) : null;
     const candleData = (b: IntradayBar) => ({ time: b.unix as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close });
     const lineData = (b: IntradayBar) => ({ time: b.unix as UTCTimestamp, value: b.close });
@@ -204,14 +239,27 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
     }
     // Lightweight Charts 会在追加新 bar 时自动滚动到实时边缘。恢复更新前的逻辑区间，
     // 让用户当前观察位置保持不动；若补入更早历史，则按新增数量平移以锚定原蜡烛。
-    if (!reset && visible) rt.chart.timeScale().setVisibleLogicalRange(preserveLogicalRange(rt.bars, bars, visible));
+    if (!reset && visibleLogical) rt.chart.timeScale().setVisibleLogicalRange(preserveLogicalRange(rt.bars, bars, visibleLogical));
     barsByTime.current = new Map(bars.map((b) => [b.unix, b])); rt.bars = bars; rt.key = key;
-    if (reset && bars.length) {
+    if (bars.length && !renderedOnce.current) { renderedOnce.current = true; setBarsEverRendered(true); }
+    if (!reset || !bars.length) return;
+    // 整体重灌后的视野处置分三种（旧实现一律 fitContent，任意 reset 都跳视野）：
+    const dayChanged = !prevKey || prevKey.split(":").slice(2).join(":") !== key.split(":").slice(2).join(":");
+    if (hadBars && !dayChanged && visibleTime) {
+      // 合约符号/K线周期切换：锚定原时钟窗口，用户缩放平移不丢
+      rt.chart.timeScale().setVisibleRange(visibleTime as { from: UTCTimestamp; to: UTCTimestamp });
+      console.debug(`[ms-data] 06 数据重灌（${prevKey} → ${key}），视野按时间锚定`);
+    } else {
+      // 首次渲染 / 跨交易日 / 历史回看窗：回到默认视野（当日=开盘到收盘，回看=整窗）
       setHovered(null);
-      rt.chart.priceScale("right").setAutoScale(true);
-      rt.chart.timeScale().fitContent();
+      if (historyOffsetDays > 0) {
+        rt.chart.priceScale("right").setAutoScale(true);
+        rt.chart.timeScale().fitContent();
+      } else {
+        fitSession(rt.chart);
+      }
     }
-  }, [bars, chartApi, symbol, product, minutes, source?.day, tick]);
+  }, [bars, chartApi, symbol, product, minutes, tick, historyOffsetDays]);
 
   useEffect(() => {
     const rt = runtime.current; if (!rt) return;
@@ -244,13 +292,19 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
     });
   }, [chartApi, positions, mode]);
 
-  const resetView = () => { const rt = runtime.current; if (rt && bars.length) { rt.chart.priceScale("right").setAutoScale(true); rt.chart.timeScale().fitContent(); } };
+  const resetView = () => { const rt = runtime.current; if (rt && bars.length) { if (historyOffsetDays > 0) { rt.chart.priceScale("right").setAutoScale(true); rt.chart.timeScale().fitContent(); } else fitSession(rt.chart); } };
   const button = "ms-control h-7 px-2 text-[11px] font-semibold text-[var(--ms-text-secondary)] aria-pressed:bg-[var(--ms-brand-dim)] aria-pressed:text-[var(--ms-brand)]";
   const scopeOptions: Array<{ value: OptionScope; label: string }> = [{value:"close",label:"前日EOD"},{value:"0dte",label:"0DTE"},{value:"d30",label:"30DTE"},{value:"d90",label:"90DTE"}];
   const profileSettingsPanel = (
     <div className="ms-popover w-56 p-2.5">
       <p className="mb-1.5 text-[11px] font-semibold text-[var(--ms-text-secondary)]">期权 OI 分布设置</p>
       <div className="flex flex-wrap gap-1">{scopeOptions.map((item) => <button key={item.value} type="button" className={button} aria-pressed={profileScope === item.value} onClick={() => onProfileScopeChange(item.value)}>{item.label}</button>)}</div>
+    </div>
+  );
+  const exposureSettingsPanel = (
+    <div className="ms-popover w-56 p-2.5">
+      <p className="mb-1.5 text-[11px] font-semibold text-[var(--ms-text-secondary)]">Exposure 剖面设置</p>
+      <div className="flex flex-wrap gap-1">{scopeOptions.map((item) => <button key={item.value} type="button" className={button} aria-pressed={exposureScope === item.value} onClick={() => onExposureScopeChange(item.value)}>{item.label}</button>)}</div>
     </div>
   );
   const levelSettingsPanel = (
@@ -271,6 +325,7 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
           {indicatorMenuOpen ? <div className="ms-popover absolute left-0 top-full z-50 mt-2 w-44 p-1.5">
             <button type="button" disabled={vpOn} onClick={() => { onVpEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权 OI 分布</span>{vpOn ? <Check size={12} /> : <span>添加</span>}</button>
             <button type="button" disabled={optionVolumeProfileEnabled} onClick={() => { onOptionVolumeProfileEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权成交量分布</span>{optionVolumeProfileEnabled ? <Check size={12} /> : <span>添加</span>}</button>
+            <button type="button" disabled={exposureProfileEnabled} onClick={() => { onExposureProfileEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>Exposure 剖面</span>{exposureProfileEnabled ? <Check size={12} /> : <span>添加</span>}</button>
             <a href="https://subapp.marsoon.cn/" target="_blank" rel="noopener noreferrer" onClick={() => setIndicatorMenuOpen(false)} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)]"><span>期权成交热图</span><span>打开</span></a>
             <button type="button" disabled={levelLayerEnabled} onClick={() => { onLevelLayerEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>期权水位</span>{levelLayerEnabled ? <Check size={12} /> : <span>添加</span>}</button>
             <button type="button" disabled={volumeIndicatorEnabled} onClick={() => { onVolumeIndicatorEnabled(true); setIndicatorMenuOpen(false); }} className="flex w-full items-center justify-between rounded-[8px] px-2.5 py-2 text-left text-[11px] font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-brand-dim)] hover:text-[var(--ms-text-primary)] disabled:opacity-60"><span>成交量</span>{volumeIndicatorEnabled ? <Check size={12} /> : <span>添加</span>}</button>
@@ -288,9 +343,9 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <div ref={setHost} className="absolute inset-0" role="img" aria-label={`${instrumentName(symbol ?? product)} K线、期货成交量、期权成交量分布与期权价位`} />
           {readout && size.width >= 360 ? <div className="pointer-events-none absolute left-2 top-2 z-30 max-w-[calc(100%-1rem)] truncate rounded-[4px] bg-[color-mix(in_srgb,var(--ms-panel-bg)_88%,transparent)] px-1.5 py-1 font-mono text-[10px] tabular-nums text-[var(--ms-text-secondary)]" aria-live="off">
-            <span>{clock.format(new Date(readout.unix * 1000))} CT　O {formatPrice(readout.open, tick)}　H {formatPrice(readout.high, tick)}　L {formatPrice(readout.low, tick)}　C {formatPrice(readout.close, tick)}　V {formatInteger(readout.volume)}</span>
+            <span>{clock.format(new Date(readout.unix * 1000))} ET　O {formatPrice(readout.open, tick)}　H {formatPrice(readout.high, tick)}　L {formatPrice(readout.low, tick)}　C {formatPrice(readout.close, tick)}　V {formatInteger(readout.volume)}</span>
           </div> : null}
-        {vpOn || optionVolumeProfileEnabled || levelLayerEnabled || volumeIndicatorEnabled ? <div ref={legendRef} className={`absolute left-2 ${readout && size.width >= 360 ? "top-10" : "top-2"} z-30 flex flex-col items-start gap-1 font-mono text-[10px]`}>
+        {vpOn || optionVolumeProfileEnabled || levelLayerEnabled || volumeIndicatorEnabled || exposureProfileEnabled ? <div ref={legendRef} className={`absolute left-2 ${readout && size.width >= 360 ? "top-10" : "top-2"} z-30 flex flex-col items-start gap-1 font-mono text-[10px]`}>
           <div id={legendListId} className={legendsCollapsed ? "hidden" : "flex flex-col items-start gap-1"}>
           {vpOn ? <div className="group/profile relative">
             <div onClick={() => { setProfileSettingsOpen((open) => !open); setLevelSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${gexProfileVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
@@ -307,6 +362,17 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
             <span className="mr-1 text-[var(--ms-text-primary)]" title={optionVolumeModel?.isFallback ? "当前范围无成交，显示最近一个有数据的 CME 交易日" : "当前图表时间范围内的 0DTE 期权成交量"}>期权成交量分布 · 0DTE{optionVolumeModel?.isFallback ? " · 上一交易日" : ""}</span>
             <button type="button" aria-label={optionVolumeProfileVisible ? "隐藏期权成交量分布" : "显示期权成交量分布"} aria-pressed={optionVolumeProfileVisible} onClick={() => onOptionVolumeProfileVisible(!optionVolumeProfileVisible)} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{optionVolumeProfileVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
             <button type="button" aria-label="删除期权成交量分布" onClick={() => onOptionVolumeProfileEnabled(false)} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
+          </div> : null}
+          {exposureProfileEnabled ? <div className="group/exposure relative">
+            <div onClick={() => { setExposureSettingsOpen((open) => !open); setProfileSettingsOpen(false); setLevelSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${exposureProfileVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
+              <span className="mr-1 text-[var(--ms-text-primary)]">Exposure 剖面 · {LEGEND_PREFIX[exposureScope]}</span>
+              <button type="button" aria-label={exposureProfileVisible ? "隐藏 Exposure 剖面" : "显示 Exposure 剖面"} aria-pressed={exposureProfileVisible} onClick={(event) => { event.stopPropagation(); onExposureProfileVisible(!exposureProfileVisible); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]">{exposureProfileVisible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
+              <button type="button" aria-label="设置 Exposure 剖面" aria-expanded={exposureSettingsOpen} onClick={(event) => { event.stopPropagation(); setExposureSettingsOpen((open) => !open); setProfileSettingsOpen(false); setLevelSettingsOpen(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"><Settings2 size={13} /></button>
+              <button type="button" aria-label="删除 Exposure 剖面" onClick={(event) => { event.stopPropagation(); setExposureSettingsOpen(false); onExposureProfileEnabled(false); }} className="p-0.5 text-[var(--ms-text-secondary)] hover:text-[var(--ms-danger)]"><X size={13} /></button>
+            </div>
+            <div className={`${exposureSettingsOpen ? "visible opacity-100" : "invisible opacity-0"} absolute left-0 top-full z-40 mt-1 transition`}>
+              {exposureSettingsPanel}
+            </div>
           </div> : null}
           {levelLayerEnabled ? <div className="group/levels relative">
             <div onClick={() => { setLevelSettingsOpen((open) => !open); setProfileSettingsOpen(false); }} className={`flex h-7 cursor-pointer items-center gap-1 rounded-[8px] border border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] px-1.5 ${levelLayerVisible ? "text-[var(--ms-text-primary)]" : "text-[var(--ms-text-tertiary)]"}`}>
@@ -335,14 +401,20 @@ export function IntradayPanel({ product, scopes, layerScopes, results, minutes, 
               setLegendsCollapsed((collapsed) => !collapsed);
               setProfileSettingsOpen(false);
               setLevelSettingsOpen(false);
+              setExposureSettingsOpen(false);
             }}
             className="ms-control grid h-6 w-7 place-items-center text-[10px] text-[var(--ms-text-primary)]"
           >
             <span aria-hidden="true">{legendsCollapsed ? "▼" : "▲"}</span>
           </button>
         </div> : null}
-          {!bars.length && <div className="absolute inset-0 grid place-items-center bg-[var(--ms-plot-bg)] px-4 text-center text-sm text-[var(--ms-text-secondary)]">{pending ? "读取分钟K线中…" : failed ? "日内数据加载失败" : emptyNotice}</div>}
+          {!bars.length && !barsEverRendered && <div className="absolute inset-0 grid place-items-center bg-[var(--ms-plot-bg)] px-4 text-center text-sm text-[var(--ms-text-secondary)]">{pending ? "读取分钟K线中…" : failed ? "日内数据加载失败" : emptyNotice}</div>}
         </div>
+        {exposureProfileEnabled && exposureProfileVisible ? (
+          <div className="h-[clamp(140px,28%,240px)] shrink-0 border-t border-[var(--ms-separator)]">
+            <ExposureProfilePane model={exposureModel} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

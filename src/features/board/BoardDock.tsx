@@ -22,6 +22,7 @@ import {
 } from "./board-dock-layout";
 import { useBoardWindowStore } from "./board-window-store";
 import { BOARD_PANELS } from "./panel-registry";
+import { usePanelVisible } from "./use-panel-visible";
 
 /**
  * 每窗三要素自包含：面板按自己的 panel id 从窗口配置 store 取品种/周期，
@@ -29,6 +30,7 @@ import { BOARD_PANELS } from "./panel-registry";
  */
 function DockPanelBody({ api, params }: IDockviewPanelProps<{ panelKey: string }>) {
   const panelId = api.id;
+  const visible = usePanelVisible(api);
   // 新窗口（含还原存档缺项）补默认配置
   useEffect(() => {
     useBoardWindowStore.getState().ensureWindow(panelId);
@@ -37,7 +39,7 @@ function DockPanelBody({ api, params }: IDockviewPanelProps<{ panelKey: string }
   return (
     <div className="h-full min-h-0 overflow-auto [overscroll-behavior:contain]">
       {def ? (
-        def.render(panelId)
+        def.render(panelId, visible)
       ) : (
         <div className="grid h-full place-items-center bg-[var(--ms-plot-bg)] px-4 text-center text-xs text-[var(--ms-text-secondary)]">
           未知面板类型（{params.panelKey}），请关闭本窗口

@@ -6,6 +6,7 @@ export const ACTIVITY_KEYS = {
 
 export const ACTIVITY_RESUME_INTERVAL_MS = 30 * 60 * 1000;
 export const ACTIVITY_RETRY_DELAY_MS = 30 * 1000;
+export const ACTIVITY_MOUNT_GRACE_MS = 60 * 1000;
 
 type ActivityStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -23,7 +24,7 @@ export function pendingActivityEvent(storage: ActivityStorage, userId: string, c
   if (existing) return existing;
   const eventId = createId();
   storage.setItem(ACTIVITY_KEYS.pendingEvent, eventId);
-  return eventId;
+  return storage.getItem(ACTIVITY_KEYS.pendingEvent)?.trim() || eventId;
 }
 
 export function completeActivityEvent(storage: ActivityStorage, now = Date.now()) {

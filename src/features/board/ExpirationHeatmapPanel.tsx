@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair } from "lucide-react";
 import { daysToExpiry, formatExpiry, formatInteger, formatNotional, formatPrice } from "@/lib/formatters";
-import { useBoardFocusStore } from "./board-focus-store";
 import { displayHeatmapValue, heatmapCellKey, type ExpirationHeatmapModel, type HeatmapCellDatum, type HeatmapExpiryMode } from "./expiration-heatmap-model";
 import { buildOpaquePalette, heatmapPaletteIndex } from "./heatmap-color-scale";
 import { nearbyStrikeWindow, virtualRowWindow } from "./expiration-heatmap-viewport";
@@ -47,7 +46,10 @@ export function ExpirationHeatmapPanel({
   const pendingScrollTop = useRef(0);
   const [scrollMeasureRef, scrollSize] = useMeasureSize<HTMLDivElement>();
   const setScrollHost = useCallback((node: HTMLDivElement | null) => { scrollRef.current = node; scrollMeasureRef(node); }, [scrollMeasureRef]);
-  const setFocus = useBoardFocusStore((s) => s.setFocus);
+  // 点击列头/行头/格子 → 新标签页打开订单流足迹图外链（不带参数）
+  const openOrderflow = useCallback(() => {
+    window.open("https://subapp.marsoon.cn/", "_blank", "noopener,noreferrer");
+  }, []);
   const { expirations, cells } = model;
   const strikes = useMemo(() => strikeRange === "near" ? nearbyStrikeWindow(model.strikes, model.spot) : model.strikes, [model.strikes, model.spot, strikeRange]);
   const rowWindow = virtualRowWindow(strikes.length, scrollTop, scrollSize.height || 620, ROW_H, HEADER_H);
@@ -86,9 +88,13 @@ export function ExpirationHeatmapPanel({
     });
   }, [spotStrike, strikes]);
 
+  const strikesFingerprint = `${strikes[0] ?? ""}-${strikes[strikes.length - 1] ?? ""}-${strikes.length}`;
+  const centeredFingerprintRef = useRef<string | null>(null);
   useEffect(() => {
+    if (centeredFingerprintRef.current === strikesFingerprint) return;
+    centeredFingerprintRef.current = strikesFingerprint;
     centerSpot("auto");
-  }, [spotStrike, strikes, centerSpot]);
+  }, [strikesFingerprint, centerSpot]);
 
   useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current); }, []);
 
@@ -118,13 +124,13 @@ export function ExpirationHeatmapPanel({
         <div className="min-w-max" style={{ width: `max(100%, ${AXIS_W + expirations.length * 84}px)` }}>
           <div className="sticky top-0 z-20 grid border-b border-[var(--ms-separator)] bg-[var(--ms-panel-bg)]" style={{ height: HEADER_H, gridTemplateColumns: `${AXIS_W}px repeat(${expirations.length}, minmax(84px, 1fr))` }}>
             <div className="sticky left-0 z-30 flex items-center justify-end border-r border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] pr-2 font-mono text-[9px] text-[var(--ms-text-tertiary)]">STRIKE</div>
-            {expirations.map((expiration) => <button key={expiration} type="button" onClick={() => setFocus({ expiry: expiration })} className="h-11 border-r border-[var(--ms-separator)] font-mono text-[10px] text-[var(--ms-text-secondary)]"><span className="block">{formatExpiry(expiration)}</span><span className="text-[8px] text-[var(--ms-text-tertiary)]">{expiryMode === "front" && !model.frontExpirationFallback ? 0 : daysToExpiry(expiration, model.snapshotUnix)}DTE</span></button>)}
+            {expirations.map((expiration) => <button key={expiration} type="button" onClick={openOrderflow} title="打开订单流足迹图" className="h-11 border-r border-[var(--ms-separator)] font-mono text-[10px] text-[var(--ms-text-secondary)]"><span className="block">{formatExpiry(expiration)}</span><span className="text-[8px] text-[var(--ms-text-tertiary)]">{expiryMode === "front" && !model.frontExpirationFallback ? 0 : daysToExpiry(expiration, model.snapshotUnix)}DTE</span></button>)}
           </div>
 
           {rowWindow.top > 0 ? <div aria-hidden="true" style={{ height: rowWindow.top }} /> : null}
           {renderedStrikes.map((strike) => (
             <div key={strike} data-spot-row={strike === spotStrike || undefined} className="grid border-b border-[var(--ms-grid)]" style={{ height: ROW_H, gridTemplateColumns: `${AXIS_W}px repeat(${expirations.length}, minmax(84px, 1fr))` }}>
-              <button type="button" onClick={() => setFocus({ strike })} className={`sticky left-0 z-10 border-r border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] pr-2 text-right font-mono text-[10px] tabular-nums ${strike === spotStrike ? "font-bold text-[var(--ms-key-gamma)]" : "text-[var(--ms-text-secondary)]"}`}>{formatPrice(strike, model.tickSize)}</button>
+              <button type="button" onClick={openOrderflow} title="打开订单流足迹图" className={`sticky left-0 z-10 border-r border-[var(--ms-separator)] bg-[var(--ms-panel-bg)] pr-2 text-right font-mono text-[10px] tabular-nums ${strike === spotStrike ? "font-bold text-[var(--ms-key-gamma)]" : "text-[var(--ms-text-secondary)]"}`}>{formatPrice(strike, model.tickSize)}</button>
               {expirations.map((expiration) => {
                 const cell = cells.get(heatmapCellKey(expiration, strike));
                 const value = displayHeatmapValue(valueOf(cell, metric), cell?.qualityFlags ?? 0);
@@ -134,7 +140,7 @@ export function ExpirationHeatmapPanel({
                 if (nearest(levels?.putWall) === strike) marks.push("PW");
                 if (nearest(levels?.flip) === strike) marks.push("ΓF");
                 const active = hover?.expiration === expiration && hover?.strike === strike;
-                return <button key={expiration} type="button" onMouseEnter={() => setHover({ expiration, strike })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ expiration, strike })} onBlur={() => setHover(null)} onClick={() => setFocus({ expiry: expiration, strike })} className={`relative border-r border-[var(--ms-grid)] font-mono text-[9px] tabular-nums ${active ? "outline outline-1 -outline-offset-1 outline-[var(--ms-brand)]" : ""}`} style={{ background: typeof value === "number" ? heat(value, maxAbs, palettes) : palettes.background, color: "var(--ms-text-primary)", opacity: 1 }} title={`${formatExpiry(expiration)} · ${formatPrice(strike, model.tickSize)} · ${METRICS.find((item) => item.value === metric)?.label}: ${metric === "oiImbalance" ? formatInteger(value) : formatNotional(value)}${cell?.qualityFlags ? ` · quality_flags=${cell.qualityFlags}` : ""}`}>
+                return <button key={expiration} type="button" onMouseEnter={() => setHover({ expiration, strike })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ expiration, strike })} onBlur={() => setHover(null)} onClick={openOrderflow} className={`relative border-r border-[var(--ms-grid)] font-mono text-[9px] tabular-nums ${active ? "outline outline-1 -outline-offset-1 outline-[var(--ms-brand)]" : ""}`} style={{ background: typeof value === "number" ? heat(value, maxAbs, palettes) : palettes.background, color: "var(--ms-text-primary)", opacity: 1 }} title={`${formatExpiry(expiration)} · ${formatPrice(strike, model.tickSize)} · ${METRICS.find((item) => item.value === metric)?.label}: ${metric === "oiImbalance" ? formatInteger(value) : formatNotional(value)}${cell?.qualityFlags ? ` · quality_flags=${cell.qualityFlags}` : ""} · 点击打开订单流足迹图`}>
                   {showNumbers && typeof value === "number" ? <span>{metric === "oiImbalance" ? formatInteger(value) : formatNotional(value).replace("$", "")}</span> : null}
                   {marks.length ? <span className="absolute left-0 top-0 bg-[var(--ms-plot-bg)] px-0.5 text-[7px] text-[var(--ms-brand)]">{marks.join("·")}</span> : null}
                   {cell?.qualityFlags ? <span className="absolute right-0 top-0 h-0 w-0 border-l-[4px] border-t-[4px] border-l-transparent border-t-[var(--ms-brand)]" aria-hidden="true" /> : null}

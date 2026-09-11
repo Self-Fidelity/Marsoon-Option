@@ -7,7 +7,10 @@ out
 .env
 *.log
 *.tsbuildinfo
-# 采集器快照落盘（本地数据，不入库）
-data/
-scripts/.serie-cache.json
 .shots/
+
+# 代码备份（本地，不入库）
+_backup/
+
+# 本地工具记忆（不入库）
+.workbuddy/

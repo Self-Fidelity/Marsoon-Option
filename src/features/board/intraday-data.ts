@@ -1,6 +1,18 @@
-import type { OptionsDashboardResponse, OptionsIntradayResponse, OptionScope } from "@/api/options";
+import type { IntradayBar, OptionsDashboardResponse, OptionsIntradayResponse, OptionScope } from "@/api/options";
 
 type Segment = { scope: OptionScope; data?: OptionsIntradayResponse };
+
+/** 并集合并（按 unix 去重，后者覆盖前者），升序返回。K 线缓存的"只增不减"合并用。
+ *  两个序列合约符号不一致时以新序列 b 整体替换（同 resetClosedDay 语义），避免跨合约价差画成跳空。 */
+export function unionBars(a: readonly IntradayBar[], b: readonly IntradayBar[], aSymbol?: string, bSymbol?: string): IntradayBar[] {
+  if (aSymbol && bSymbol && aSymbol.toUpperCase() !== bSymbol.toUpperCase()) return [...b];
+  if (!a.length) return [...b];
+  if (!b.length) return [...a];
+  const byTime = new Map<number, IntradayBar>();
+  for (const bar of a) byTime.set(bar.unix, bar);
+  for (const bar of b) byTime.set(bar.unix, bar);
+  return [...byTime.values()].sort((x, y) => x.unix - y.unix);
+}
 export function candleUnderlying(data?: OptionsIntradayResponse): string | undefined {
   return (data?.candle_underlying_symbol ?? data?.underlying_symbol)?.toUpperCase();
 }
@@ -23,8 +35,9 @@ export function mergeCandlePayload(
     ...data,
     has_data: true,
     missing_reason: undefined,
-    bars: candles.bars,
-    candle_underlying_symbol: candles.candle_underlying_symbol,
+    /** K 线历史只增不减（2026-09-10）：上游任何一次"瞬时缺数据"的响应都不允许抹掉已有历史。 */
+    bars: unionBars(data.bars, candles.bars, data.candle_underlying_symbol, candles.candle_underlying_symbol),
+    candle_underlying_symbol: candles.candle_underlying_symbol ?? data.candle_underlying_symbol,
     candle_is_reference: candles.candle_is_reference,
     candle_notice: candles.candle_notice,
   };

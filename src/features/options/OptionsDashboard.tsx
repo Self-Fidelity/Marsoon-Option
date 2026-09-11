@@ -5,7 +5,7 @@ import { useCallback, useMemo } from "react";
 
 import type { OptionProduct, OptionScope } from "@/api/options";
 import { buildDashboardViewModel } from "./dashboard-view-model";
-import { useSnapshotSync } from "./ingest-status";
+import { useSnapshotSync } from "./data-freshness";
 import { buildLevelsViewModel } from "./levels-view-model";
 import { DashboardContent } from "./components/dashboard-panels";
 import {
@@ -46,12 +46,12 @@ export function OptionsDashboard() {
   const selectedScopes = parseScopes(searchParams.get("scope"));
   // 单值消费（查询/建模）用主周期 = 多选中最高优先级
   const scope = selectedScopes[0] ?? "0dte";
-  // R3：快照版本（capturedAt）变化驱动失效，同版本不重复请求
+  // 数据版本变化驱动失效，同一版本不重复请求
   useSnapshotSync();
   const dashboardQuery = useOptionsDashboard(product, scope);
   const levelsQuery = useOptionsLevels(product, scope);
-  // 收盘档：收盘数据待接入，不建模型，下方统一空态
-  const closePending = scope === "close";
+  // 收盘档：是否有数据由 Go 裁决（BFF 已放行直连），只在数据明确为空时走空态
+  const closePending = scope === "close" && dashboardQuery.data?.has_data === false;
   const viewModel = useMemo(
     () =>
       dashboardQuery.data && !closePending

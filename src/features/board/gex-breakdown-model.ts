@@ -1,12 +1,13 @@
-import { optionProductConfig, type OptionProduct, type OptionScope } from "@/api/options";
+import type { OptionProduct } from "@/api/options";
 
 import type { DashboardViewModel, GammaRow } from "../options/dashboard-view-model";
 
 /**
- * 08 Call/Put GEX 拆分面板的输入契约。
+ * 06 内嵌 VP 条带的输入契约（原 08 Call/Put GEX 拆分面板契约，面板已删）。
  * 面板只认这个结构，不依赖 dashboard 页面状态——后续 /board 拼装布局复用。
  */
 export interface GexBreakdownModel {
+  product: OptionProduct;
   rows: GammaRow[];
   spot?: number;
   callWall?: number;
@@ -29,6 +30,7 @@ export function buildGexBreakdownModel(
   viewModel: DashboardViewModel,
 ): GexBreakdownModel {
   return {
+    product: viewModel.product,
     rows: viewModel.gammaRows,
     spot: viewModel.spot,
     callWall: viewModel.callWall,
@@ -37,55 +39,5 @@ export function buildGexBreakdownModel(
     tickSize: viewModel.tickSize,
     scope: viewModel.scope,
     snapshotUnix: viewModel.snapshotUnix,
-  };
-}
-
-const DEBUG_STEP: Record<OptionProduct, number> = { NQ: 25, ES: 10, GC: 5 };
-const DEBUG_SPOT: Record<OptionProduct, number> = { NQ: 29600, ES: 6700, GC: 2650 };
-
-/**
- * 调试用 GEX 剖面（非实时）。围绕 spot 生成看涨/看跌墙与 Flip，
- * 保证与 06 当前价区有交叠，条带能画出来。
- */
-export function buildDebugGexBreakdownModel(
-  product: OptionProduct,
-  scope: OptionScope,
-  spot?: number,
-): GexBreakdownModel {
-  const step = DEBUG_STEP[product];
-  const tickSize = optionProductConfig[product].tickSize;
-  const center = Math.round((spot ?? DEBUG_SPOT[product]) / step) * step;
-  const callWall = center + step * 4;
-  const putWall = center - step * 8;
-  const gammaFlip = center - step * 2;
-  const rows: GammaRow[] = [];
-  for (let i = -48; i <= 48; i++) {
-    const strike = center + i * step;
-    const dCall = (strike - callWall) / (step * 6);
-    const dPut = (strike - putWall) / (step * 6);
-    const callGEX = 3.2e8 * Math.exp(-dCall * dCall);
-    const putGEX = -2.8e8 * Math.exp(-dPut * dPut);
-    rows.push({
-      strike,
-      callGEX,
-      putGEX,
-      netGEX: callGEX + putGEX,
-      grossGEX: Math.abs(callGEX) + Math.abs(putGEX),
-      callOI: 0,
-      putOI: 0,
-      callVol: 0,
-      putVol: 0,
-      qualityFlags: 0,
-    });
-  }
-  return {
-    rows,
-    spot: center,
-    callWall,
-    putWall,
-    gammaFlip,
-    tickSize,
-    scope,
-    snapshotUnix: Math.floor(Date.now() / 1000),
   };
 }

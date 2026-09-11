@@ -6,7 +6,7 @@ import { getIvTerm, type IvTermPoint, type IvTermResponse, type OptionProduct, t
 import { dataAvailabilityMessage } from "@/lib/data-messages";
 import { useMeasureSize } from "./use-measure-size";
 import { ivTermGroups, ivTermPaths, ivTermX, type IvTermAxis } from "./iv-term-model";
-import { clampStrikeViewport, panStrikeViewport, zoomStrikeViewport, type StrikeViewport } from "./overview-viewport";
+import { clampStrikeViewport, panStrikeViewport, zoomStrikeViewport, type StrikeViewport } from "./strike-viewport";
 import { useBoardWindowStore } from "./board-window-store";
 
 const COLORS = ["var(--ms-brand)", "var(--ms-key-gamma)", "var(--ms-buy-bright)", "var(--ms-sell-bright)", "var(--ms-text-secondary)"];
@@ -26,7 +26,7 @@ function earlierDate(date: string, days: number) {
 }
 
 /** Every curve is one real futures contract and one observed snapshot. */
-export function IvTermPanel({ product, scope, panelId }: { product: OptionProduct; scope: OptionScope; panelId: string }) {
+export function IvTermPanel({ product, scope, panelId, visible = true }: { product: OptionProduct; scope: OptionScope; panelId: string; visible?: boolean }) {
   const axis = useBoardWindowStore((state) => state.windows[panelId]?.ivTermAxis ?? "dte") as IvTermAxis;
   const dates = useBoardWindowStore((state) => state.windows[panelId]?.ivTermDates ?? []);
   const setIvTermAxis = useBoardWindowStore((state) => state.setIvTermAxis);
@@ -47,6 +47,7 @@ export function IvTermPanel({ product, scope, panelId }: { product: OptionProduc
       date,
       AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
     ),
+    enabled: visible,
     staleTime: date ? Infinity : 30_000,
     retry: false,
     refetchInterval: date ? false as const : 60_000,

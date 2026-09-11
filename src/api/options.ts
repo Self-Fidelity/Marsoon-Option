@@ -1,4 +1,5 @@
 import { sanitizePublicMessage } from "@/lib/data-messages";
+import { heavyLane, timedLane } from "@/lib/request-lanes";
 
 export interface OptionDataMeta { missing_reason?: string; data_notice?: string; underlying_symbol?: string; }
 export type OptionProduct = "NQ" | "ES" | "GC";
@@ -98,7 +99,7 @@ export interface OptionLevelPoint {
 }
 
 export interface OptionsLevelsResponse extends OptionDataMeta {
-  source?: "local-demo" | string;
+  source?: string;
   product: OptionProduct;
   scope: OptionScope;
   /** false = 当前 scope 尚无完整数据；缺省视同 true（兼容旧调用） */
@@ -131,7 +132,7 @@ export interface OptionDashboardExpiry {
 }
 
 export interface OptionsDashboardResponse extends OptionDataMeta {
-  source?: "local-demo" | string;
+  source?: string;
   product: OptionProduct;
   scope?: OptionScope;
   /** false = 当前 scope 尚无完整数据；缺省视同 true */
@@ -219,7 +220,7 @@ export interface OptionsChainDetail {
 }
 
 export interface OptionsChainResponse extends OptionDataMeta {
-  source?: "local-demo" | string;
+  source?: string;
   product: OptionProduct;
   scope?: OptionScope;
   /** false = 当前 scope 尚无完整数据；缺省视同 true */
@@ -277,7 +278,7 @@ export interface OptionsIntradayResponse extends OptionDataMeta {
   candle_underlying_symbol?: string;
   candle_is_reference?: boolean;
   candle_notice?: string;
-  source?: "barchart-replay" | string;
+  source?: string;
   product: OptionProduct;
   scope: OptionScope;
   /** 落盘文件日期（UTC，与 jsonl 命名一致） */
@@ -308,6 +309,7 @@ export interface OptionVolumeProfileResponse extends OptionDataMeta {
   source_to: number;
   fallback: boolean;
   fallback_days: number;
+  window_clamped?: boolean;
   has_data: boolean;
   rows: OptionVolumeProfileRow[];
 }
@@ -331,7 +333,7 @@ export interface IvTermResponse extends OptionDataMeta {
 }
 
 export function getIvTerm(product: OptionProduct, scope: OptionScope, date?: string, signal?: AbortSignal) {
-  return getOptionsApi<IvTermResponse>("/api/options/iv-term", { product, scope, date }, signal);
+  return getOptionsApi<IvTermResponse>("/api/options/iv-term", { product, scope, date }, signal, { lane: "heavy", label: `iv-term:${product}:${scope}`, priority: scope === "0dte" ? 1 : 0 });
 }
 
 /** 每到期一点（官方口径，快照 expiries[]，~82 个） */
@@ -358,7 +360,7 @@ export interface TermIvSpread {
 }
 
 export interface OptionsTermResponse extends OptionDataMeta {
-  source?: "barchart-delayed" | string;
+  source?: string;
   product: OptionProduct;
   /** 请求 scope 回显（close 空态时缺省） */
   scope?: OptionScope;
@@ -393,18 +395,71 @@ function buildUrl(path: string, query: Record<string, QueryValue>): URL {
   return url;
 }
 
+let sessionRefreshInFlight: Promise<boolean> | null = null;
+
+function refreshSessionOnce(): Promise<boolean> {
+  if (!sessionRefreshInFlight) {
+    sessionRefreshInFlight = fetch("/api/auth/session", {
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+      },
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        sessionRefreshInFlight = null;
+      });
+  }
+  return sessionRefreshInFlight;
+}
+
+// 须大于 BFF 路由总预算（115s）：Go 重聚合接口实测常态 25~60s，60s 会把"慢但有数据"掐在最后一刻。
+const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+
 export async function getOptionsApi<T>(
   path: string,
   query: Record<string, QueryValue>,
   signal?: AbortSignal,
+  lane?: { lane: "heavy"; priority?: number; label?: string } | { lane: "timed"; label?: string },
 ): Promise<T> {
-  const response = await fetch(buildUrl(path, query), {
-    signal,
+  const execute = () => getOptionsApiInner<T>(path, query, signal);
+  if (lane?.lane === "heavy") return heavyLane(lane.label ?? path, execute, lane.priority);
+  if (lane?.lane === "timed") return timedLane(lane.label ?? path, execute);
+  return execute();
+}
+
+async function getOptionsApiInner<T>(
+  path: string,
+  query: Record<string, QueryValue>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const timeout = AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const init: RequestInit = {
+    signal: requestSignal,
     credentials: "include",
     headers: {
       Accept: "application/json",
     },
-  });
+  };
+  const request = () =>
+    fetch(buildUrl(path, query), init).catch((cause: unknown) => {
+      if (timeout.aborted) {
+        throw new OptionsApiError("请求超时，请稍后重试。");
+      }
+      throw cause;
+    });
+
+  let response = await request();
+
+  let refreshed = false;
+  if (response.status === 401) {
+    refreshed = await refreshSessionOnce();
+    if (refreshed) {
+      response = await request();
+    }
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   const text = await response.text();
@@ -428,6 +483,9 @@ export async function getOptionsApi<T>(
       typeof body.error === "string"
         ? sanitizePublicMessage(body.error, "请求未完成，请稍后重试。")
         : "请求未完成，请稍后重试。";
+    if (response.status === 401 && !refreshed && typeof window !== "undefined") {
+      window.location.assign("/login");
+    }
     throw new OptionsApiError(message, response.status);
   }
 
@@ -443,8 +501,11 @@ export function getOptionDashboard(
 ): Promise<OptionsDashboardResponse> {
   return getOptionsApi<OptionsDashboardResponse>(
     "/api/options/dashboard",
-    { product, scope, days: days ?? 20, window_pct: 0.12, asof },
+    // days 缺省不传：由 BFF 按 scope 给口径（0dte=1/d30=30/d90=90/close=45）。
+    // 旧实现恒传 20，0dte 白传 20 天、close 把 45 天口径顶掉（更慢还取不齐）。
+    { product, scope, days, window_pct: 0.12, asof },
     signal,
+    { lane: "heavy", label: `dashboard:${product}:${scope}:${days ?? "auto"}`, priority: scope === "0dte" ? 1 : 0 },
   );
 }
 
@@ -454,15 +515,21 @@ export function getOptionLevels(
   signal?: AbortSignal,
 ): Promise<OptionsLevelsResponse> {
   const timeframe = 300;
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const latestBucket = Math.floor(nowUnix / timeframe) * timeframe;
-  const to = latestBucket + timeframe;
-  const from = latestBucket - 60 * 60;
+  const query: Record<string, string | number | undefined> = { product, scope, timeframe };
+  if (scope !== "close") {
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const latestBucket = Math.floor(nowUnix / timeframe) * timeframe;
+    query.to = latestBucket + timeframe;
+    query.from = latestBucket - 60 * 60;
+  }
+  // close 档是日结快照：now-1h 窗口与 EOD 快照时间错位恒空打，
+  // 不传窗口，由 BFF 锚定 status 里的 close 快照 unix 取窗。
 
   return getOptionsApi<OptionsLevelsResponse>(
     "/api/options/levels",
-    { product, scope, from, to, timeframe },
+    query,
     signal,
+    { lane: "heavy", label: `levels:${product}:${scope}`, priority: scope === "0dte" ? 1 : 0 },
   );
 }
 
@@ -477,6 +544,8 @@ export function getOptionChain(
     "/api/options/chain",
     { product, expiration, scope, series_id: seriesId },
     signal,
+    // 优先级：显式 expiration = 09 用户下钻（2，队首）；0dte 档（1）；其余（0）
+    { lane: "heavy", label: `chain:${product}:${scope}`, priority: expiration !== undefined ? 2 : scope === "0dte" ? 1 : 0 },
   );
 }
 
@@ -490,6 +559,7 @@ export function getOptionIntraday(
     "/api/options/intraday",
     { product, scope, options_only: true, ...range },
     signal,
+    { lane: "heavy", label: `options-only:${product}:${scope}`, priority: scope === "0dte" ? 1 : 0 },
   );
 }
 
@@ -502,6 +572,8 @@ export function getOptionIntradayBars(
     "/api/options/intraday",
     { product, scope: "0dte", bars_only: true, ...range },
     signal,
+    // K 线走快车道：不占重车道信号量，仅计时（>3s 时 console.debug）
+    { lane: "timed", label: `bars:${product}` },
   );
 }
 
@@ -515,6 +587,7 @@ export function getOptionVolumeProfile(
     "/api/options/volume-profile",
     { product, from, to },
     signal,
+    { lane: "heavy", label: `volume-profile:${product}`, priority: 1 },
   );
 }
 
@@ -527,5 +600,6 @@ export function getOptionTerm(
     "/api/options/term",
     { product, scope },
     signal,
+    { lane: "heavy", label: `term:${product}:${scope}`, priority: scope === "0dte" ? 1 : 0 },
   );
 }

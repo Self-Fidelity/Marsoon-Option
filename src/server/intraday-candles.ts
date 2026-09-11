@@ -65,11 +65,11 @@ export async function attachAvailableCandles(
 ): Promise<OptionsIntradayResponse> {
   const at = now ?? Math.floor(Date.now() / 1000);
   const optionUnderlying = (data.underlying_symbol ?? fixedUnderlying)?.toUpperCase();
-  if (!optionUnderlying) return data;
+  if (!optionUnderlying) return { ...data };
   if (data.bars.length) return { ...data, candle_underlying_symbol: optionUnderlying, candle_is_reference: false };
   const from = range?.from ?? sessionStart(data.day);
   const to = range?.to ?? Math.floor(at / 60) * 60 + 1;
-  if (to <= from || to - from > 7 * 86400) return data;
+  if (to <= from || to - from > 7 * 86400) return { ...data };
   const fetchBars = async (symbol: string, rangeFrom = from, rangeTo = to) => {
     const response = record(await read("/options/underlying-bars", { product, underlying: symbol, from: rangeFrom, to: rangeTo, timeframe: 60 }));
     if (response.underlying_symbol !== symbol) return [];

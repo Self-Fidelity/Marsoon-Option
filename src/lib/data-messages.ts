@@ -1,6 +1,6 @@
 import { localizeInstrumentText } from "./instrument-labels";
 
-const INTERNAL_DATA_DETAIL = /\b(go|golang|databento|barchart|clickhouse|postgres\w*|redis|nats|sql|http\w*|api|bff|endpoint|upstream|provider|vendor|ticker|symbol|underlying|exception|error|stack|database|table|column|timeout|fetch|undefined|null|ECONN\w*|ENOENT)\b|\b(?:NQ|ES|GC)(?:[FGHJKMNQUVXZ]\d{1,4})?\b|\/(?:api|options|auth)\b|https?:\/\/|(?:[a-z0-9-]+\.)+(?:com|cn|net|io)\b|[A-Z_]{3,}=|接口|服务端|后端|数据库|连接池|堆栈|迁移|数据源|供应商/i;
+const INTERNAL_DATA_DETAIL = /\b(go|golang|databento|clickhouse|postgres\w*|redis|nats|sql|http\w*|api|bff|endpoint|upstream|provider|vendor|ticker|symbol|underlying|exception|error|stack|database|table|column|timeout|fetch|undefined|null|ECONN\w*|ENOENT)\b|\b(?:NQ|ES|GC)(?:[FGHJKMNQUVXZ]\d{1,4})?\b|\/(?:api|options|auth)\b|https?:\/\/|(?:[a-z0-9-]+\.)+(?:com|cn|net|io)\b|[A-Z_]{3,}=|接口|服务端|后端|数据库|连接池|堆栈|迁移|数据源|供应商/i;
 
 export function sanitizePublicMessage(message: string | null | undefined, fallback: string) {
   if (!message || INTERNAL_DATA_DETAIL.test(message)) return fallback;

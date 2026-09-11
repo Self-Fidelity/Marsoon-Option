@@ -9,9 +9,7 @@ function loadModule(path) {
   const source = fs.readFileSync(new URL(path, import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
-  const localRequire = (name) => name === './option-stats-model'
-    ? loadModule('../src/features/board/option-stats-model.ts')
-    : require(name);
+  const localRequire = (name) => require(name);
   new Function('require', 'module', 'exports', js)(localRequire, module, module.exports);
   return module.exports;
 }
@@ -63,25 +61,16 @@ test('widget product changes are local; toolbar switches all windows including r
 });
 
 test('widget scope changes update only that widget and leave the master query stable', () => {
-  const { useBoardWindowStore: store, effectiveLineScopes, effectiveTableScope } = loadModule('../src/features/board/board-window-store.ts');
-  for (const id of ['volatility', 'gex']) store.getState().ensureWindow(id);
+  const { useBoardWindowStore: store, effectiveLineScopes } = loadModule('../src/features/board/board-window-store.ts');
+  for (const id of ['volatility']) store.getState().ensureWindow(id);
   const before = store.getState();
 
   store.getState().toggleLineScope('volatility', 'd30');
   const afterLine = store.getState();
   assert.equal(afterLine.master, before.master);
   assert.equal(afterLine.perProductScope, before.perProductScope);
-  assert.equal(afterLine.windows.gex, before.windows.gex);
   assert.equal(afterLine.windows.volatility.productLinked, false);
   assert.deepEqual(effectiveLineScopes(afterLine.windows.volatility, afterLine.perProductScope), ['d30']);
-
-  store.getState().setWindowScope('gex', 'd90');
-  const afterTable = store.getState();
-  assert.equal(afterTable.master, before.master);
-  assert.equal(afterTable.perProductScope, before.perProductScope);
-  assert.equal(afterTable.windows.volatility, afterLine.windows.volatility);
-  assert.equal(afterTable.windows.gex.productLinked, false);
-  assert.equal(effectiveTableScope(afterTable.windows.gex, afterTable.perProductScope), 'd90');
 });
 
 test('volatility scopes support an isolated four-way overlay and never become empty', () => {

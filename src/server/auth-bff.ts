@@ -55,6 +55,24 @@ export async function callAuthBackend(path: string, init: RequestInit) {
   return body;
 }
 
+const refreshInFlight = new Map<string, Promise<AuthBackendResult>>();
+
+export function refreshAuthSession(refreshToken: string): Promise<AuthBackendResult> {
+  const existing = refreshInFlight.get(refreshToken);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const auth = await callAuthBackend("/auth/refresh", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }) }) as AuthBackendResult;
+      if (!auth?.access_token) throw new AuthBackendError("刷新响应缺少访问令牌");
+      return auth;
+    } finally {
+      refreshInFlight.delete(refreshToken);
+    }
+  })();
+  refreshInFlight.set(refreshToken, promise);
+  return promise;
+}
+
 const cookieBase = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/" };
 
 export async function applyAuthCookies(response: NextResponse, auth: AuthBackendResult, fallbackEmail = "") {

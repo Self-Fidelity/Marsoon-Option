@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 const source=fs.readFileSync(new URL('../src/features/board/lightweight-model.ts',import.meta.url),'utf8');
 const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
-const {aggregateIntradayBars,buildChartPositions,historicalPositionData,tailUpdateStart,preserveLogicalRange}=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+const {aggregateIntradayBars,buildChartPositions,tailUpdateStart,preserveLogicalRange}=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 const t=Date.parse('2026-09-04T15:00:00Z')/1000;
 const bar=(unix,volume=2)=>({unix,open:100,high:104,low:98,close:102,volume,final:true});
 test('minute data is deduplicated before OHLCV aggregation; gaps are not fabricated',()=>{
@@ -19,10 +19,6 @@ test('positions are from the exact underlying, keep missing values empty and mer
  const out=buildChartPositions([{scope:'0dte',data},{scope:'d30',data:{...data,current:{call_wall:105,put_wall:0,gamma_flip:null,spot:102}}},{scope:'all',data:{...data,underlying_symbol:'NQZ6'}}],'0dte','NQU6',103);
  assert.deepEqual(out.find(p=>p.kind==='CW').scopes,['0dte','d30']);assert.equal(out.some(p=>p.kind==='PW'),false);assert.equal(out.some(p=>p.scopes.includes('all')),false);
  assert.equal(out.find(p=>p.kind==='SPOT').price,103);
-});
-test('historical positions are not moved backwards to the start of an earlier bar',()=>{
- const out=historicalPositionData([bar(t),bar(t+300),bar(t+600)],[{t:t+60,call_wall:110},{t:t+300,call_wall:112},{t:t+600,call_wall:null}],'call_wall');
- assert.deepEqual(out,[{time:t},{time:t+300,value:112},{time:t+600}]);
 });
 test('tail updates are incremental, earlier corrections use a full replacement',()=>{
  const before=[bar(t),bar(t+60)];

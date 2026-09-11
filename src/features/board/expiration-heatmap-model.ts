@@ -1,4 +1,4 @@
-import type { OptionScope } from "@/api/options";
+import type { OptionProduct, OptionScope } from "@/api/options";
 import type { DashboardViewModel } from "../options/dashboard-view-model";
 
 function canonicalLevelMetric(metric?: string): string | undefined {
@@ -27,6 +27,7 @@ export interface HeatmapCellDatum {
 export interface ExpiryLevels { callWall?: number; putWall?: number; flip?: number; }
 export interface ScopeKeyLevels { scope: OptionScope; spot?: number; callWall?: number; putWall?: number; gammaFlip?: number; }
 export interface ExpirationHeatmapModel {
+  product: OptionProduct;
   /** UTC calendar-day columns, matching the Rust option heatmap. */
   expirations: number[];
   strikes: number[];
@@ -145,6 +146,7 @@ export function buildExpirationHeatmapModel(
   let maxAbs = 1e-9;
   for (const cell of cells.values()) maxAbs = Math.max(maxAbs, Math.abs(cell.netGex), Math.abs(cell.callGex), Math.abs(cell.putGex));
   return {
+    product: viewModel.product,
     expirations, strikes, cells, expiryLevels, scopeLevels, maxAbs,
     truncatedExpirations: Math.max(0, allDays.length - expirations.length),
     truncatedStrikes: 0,

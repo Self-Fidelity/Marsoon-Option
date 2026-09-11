@@ -24,7 +24,7 @@ export interface LevelBadgeModel {
   value: string;
   /** 语义色（accent 竖条 / 数值段文字 / SPOT 纯文字） */
   fill: string;
-  /** plain 变体（SPOT）：无 accent 竖条的灰底牌，价格行 + 倒计时行（第十七轮徽标化；此前为纯文字） */
+  /** plain 变体（SPOT）：无 accent 竖条的灰底牌，单行价格（第十七轮徽标化；此前为纯文字） */
   plain: boolean;
   changedAt: number | null;
 }
@@ -66,7 +66,7 @@ export const LEVEL_BADGE_EXPLAIN: Record<LevelBadgeKind, string> = {
   CW: "看涨墙（Call Wall）：看涨期权持仓最集中的价位，价格涨近这里常遇到阻力。",
   PW: "看跌墙（Put Wall）：看跌期权持仓最集中的价位，价格跌近这里常获得支撑。",
   FLIP: "Gamma 翻转位：价格穿过它，做市商的对冲方向会反转，行情波动往往会放大。",
-  SPOT: "现货最新价；下方小字是距下次数据更新的倒计时。",
+  SPOT: "现货最新价，即当前标的期货的最新成交价。",
 };
 
 /** 周期前缀释义（tooltip 追加，帮小白读名字，如 "0D+90·PW"） */
@@ -136,7 +136,7 @@ export function selectLevelBadges(
  *  历史：第二十五轮名字行再放大 28 → 30，第二十四轮可读性优先 24 → 28，第二十八轮 1B 22 → 24，第二十二轮 20 → 22，第十五轮终端风改版 22 → 20） */
 export const LEVEL_BADGE_H = 20;
 
-/** SPOT 牌高（8.5px 价格行 + 8px 倒计时行 + 上下内边距，半高 13；第十七轮 SPOT 徽标化新增，第二十八轮字号随抬档） */
+/** SPOT 牌高（价格行 + 上下内边距，半高 13；第十七轮 SPOT 徽标化新增，第二十八轮字号随抬档） */
 export const SPOT_BADGE_H = 26;
 
 /** 牌左侧语义色 accent 竖条宽 */

@@ -52,6 +52,12 @@ export function parseCandleStreamMessage(text: string): CandleStreamBatch | null
   return bars.length ? { symbol, timeframe, bars } : null;
 }
 
+/** Cached candles are anchored to a different contract than the incoming batch (roll/reference drift). */
+export function candleStreamSymbolMismatch(current: OptionsIntradayResponse | undefined, symbol: string): boolean {
+  const currentSymbol = (current?.candle_underlying_symbol ?? current?.underlying_symbol)?.toUpperCase();
+  return !!currentSymbol && currentSymbol !== symbol;
+}
+
 /** Upsert websocket tail bars without accumulating repeated minute volume. */
 export function mergeCandleStreamBars(
   current: OptionsIntradayResponse | undefined,
@@ -59,8 +65,7 @@ export function mergeCandleStreamBars(
   historyDays: number,
 ): OptionsIntradayResponse | undefined {
   if (!current) return current;
-  const currentSymbol = (current.candle_underlying_symbol ?? current.underlying_symbol)?.toUpperCase();
-  if (currentSymbol && currentSymbol !== batch.symbol) return current;
+  if (candleStreamSymbolMismatch(current, batch.symbol)) return current;
 
   const existing = current.bars ?? [];
   const incomingFirst = batch.bars[0]!.unix;
@@ -73,12 +78,13 @@ export function mergeCandleStreamBars(
   const sorted = [...byTime.values()].sort((a, b) => a.unix - b.unix);
   const newest = sorted.at(-1)?.unix ?? 0;
   const cutoff = newest - Math.max(1, historyDays) * 86400;
+  const optionUnderlying = current.underlying_symbol?.toUpperCase();
   return {
     ...current,
     has_data: true,
     missing_reason: undefined,
     bars: sorted.filter((bar) => bar.unix >= cutoff),
     candle_underlying_symbol: batch.symbol,
-    candle_is_reference: false,
+    candle_is_reference: optionUnderlying ? batch.symbol !== optionUnderlying : (current.candle_is_reference ?? false),
   };
 }

@@ -8,7 +8,7 @@ import type { DockviewApi } from "dockview-react";
 import type { OptionProduct, OptionScope } from "@/api/options";
 import { FullscreenToggleButton } from "@/components/FullscreenToggleButton";
 import { SidebarToggleButton } from "@/components/SidebarToggle";
-import { useSnapshotSync } from "@/features/options/ingest-status";
+import { useSnapshotSync } from "@/features/options/data-freshness";
 import {
   DashboardToolbar,
   LoadingDashboard,
@@ -64,6 +64,7 @@ export function BoardView() {
   const master = useBoardWindowStore((s) => s.master);
   const setMasterProduct = useBoardWindowStore((s) => s.setMasterProduct);
   const setMasterScopes = useBoardWindowStore((s) => s.setMasterScopes);
+  const toggleMasterScope = useBoardWindowStore((s) => s.toggleMasterScope);
   // URL 显式参数优先（深链/分享），只在变化时覆盖 store 主控；无参数时沿用持久化还原值
   const urlProduct = parseProduct(searchParams.get("product"));
   const urlScopes = parseScopes(searchParams.get("scope"));
@@ -89,7 +90,7 @@ export function BoardView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [master.product, master.scopes]);
 
-  // R3：快照版本（capturedAt）变化驱动失效，同版本各面板零重复请求
+  // 数据版本变化驱动失效，同一版本各面板零重复请求
   useSnapshotSync();
 
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
@@ -137,6 +138,8 @@ export function BoardView() {
       <DashboardToolbar
         product={master.product}
         onProductChange={setMasterProduct}
+        scopes={master.scopes}
+        onToggleScope={toggleMasterScope}
         leading={<SidebarToggleButton />}
         productTrailing={
           <div className="flex items-center gap-1.5">

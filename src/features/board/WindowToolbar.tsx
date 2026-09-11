@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Link, Unlink } from "lucide-react";
 import { productName } from "@/lib/instrument-labels";
 
 import { optionProductConfig, type OptionProduct, type OptionScope } from "@/api/options";
@@ -21,8 +22,9 @@ const SCOPE_CHIPS: Array<{ value: OptionScope; label: string; title: string }> =
 export type WindowToolbarKind = "line" | "table" | "chain";
 
 /**
- * 窗口品种选择只修改本窗；顶部品种选择统一修改所有窗口。
- * 不再提供联动按钮。周期 chips 保留既有单选与存档周期联动口径；chain 不渲染。
+ * 窗口品种选择只修改本窗并自动解耦；顶部品种选择统一修改所有联动窗口。
+ * 🔗 chip 为联动开关（品种+周期两维度捆绑）：联动=跟随总控（table 类周期 chips 置灰），
+ * 解耦=冻结当时周期快照窗内自治；chain 不渲染周期 chips，仅显示 🔗 状态。
  */
 export function WindowToolbar({
   panelId,
@@ -69,6 +71,7 @@ export function WindowToolbarControls({
   const setWindowScope = useBoardWindowStore((s) => s.setWindowScope);
   const toggleLineScope = useBoardWindowStore((s) => s.toggleLineScope);
   const toggleLineScopeMulti = useBoardWindowStore((s) => s.toggleLineScopeMulti);
+  const toggleProductLinked = useBoardWindowStore((s) => s.toggleProductLinked);
 
   if (!config) return null;
   const tableScope = effectiveTableScope(config, perProductScope);
@@ -90,16 +93,32 @@ export function WindowToolbarControls({
         ))}
       </select>
 
+      <button
+        type="button"
+        aria-pressed={config.productLinked}
+        onClick={() => toggleProductLinked(panelId)}
+        title={config.productLinked ? "联动中：品种与周期跟随总控，点击解耦后窗内自治" : "已解耦：冻结窗内品种与周期，点击重新联动总控"}
+        aria-label={config.productLinked ? "解除与总控的联动" : "重新联动总控"}
+        className={`ms-control flex h-7 items-center gap-1 px-2 text-[11px] font-semibold ${
+          config.productLinked ? "text-[var(--ms-brand)]" : "text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"
+        }`}
+      >
+        {config.productLinked ? <Link size={12} /> : <Unlink size={12} />}
+        {config.productLinked ? "联动" : "解耦"}
+      </button>
+
       {kind === "chain" || !showScopes ? null : (
         <div className="ms-control flex p-0.5" aria-label={scopeSelection === "multiple" ? "期权周期（可叠加）" : "期权周期"}>
           {SCOPE_CHIPS.map((chip) => {
             const active =
               kind === "line" ? lineScopes.includes(chip.value) : tableScope === chip.value;
+            const followMaster = kind === "table" && config.productLinked;
             return (
               <button
                 key={chip.value}
                 type="button"
                 aria-pressed={active}
+                disabled={followMaster}
                 onClick={() =>
                   kind === "line"
                     ? scopeSelection === "multiple"
@@ -107,8 +126,8 @@ export function WindowToolbarControls({
                       : toggleLineScope(panelId, chip.value)
                     : setWindowScope(panelId, chip.value)
                 }
-                title={chip.title}
-                className={`h-[18px] px-1 font-mono text-[10px] transition-colors ${
+                title={followMaster ? "跟随总控，解耦后可窗内自选" : chip.title}
+                className={`h-[18px] px-1 font-mono text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   active
                     ? "rounded-md bg-[var(--ms-brand-dim)] text-[var(--ms-brand)]"
                     : "text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"

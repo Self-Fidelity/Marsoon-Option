@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * panel-shots.mjs — 经 WebBridge daemon 抓取 /panel-shot 导出页，产出 7 个
+ * panel-shots.mjs — 经 WebBridge daemon 抓取 /panel-shot 导出页，产出 5 个
  * 单文件 HTML（CSS 全内联、脚本剔除、真实数据快照）到项目外定稿目录。
  * 用法：node scripts/panel-shots.mjs（需 dev 服务在 4173、daemon 在 10086）
  */
@@ -13,11 +13,9 @@ const SESSION = "panel-shot";
 const OUT_DIR = "E:/Users/biycd/Desktop/Trade file/期权/01 初次定稿/panels";
 
 const SHOTS = [
-  ["overview", "01-overview.html"],
   ["expiration", "05-expiration.html"],
   ["intraday", "06-intraday.html"],
   ["volatility", "07-volatility.html"],
-  ["gex", "08-gex.html"],
   ["chain", "09-chain.html"],
   ["spread", "10-spread.html"],
 ];

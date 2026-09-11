@@ -7,14 +7,24 @@ import {
   optionProductConfig,
   OptionsApiError,
   type OptionProduct,
+  type OptionScope,
 } from "@/api/options";
 import { formatPrice } from "@/lib/formatters";
 import type { DashboardViewModel } from "../dashboard-view-model";
+
+const MASTER_SCOPE_CHIPS: Array<{ value: OptionScope; label: string; title: string }> = [
+  { value: "close", label: "前日EOD", title: "前一 CME 交易日官方结算价与持仓量计算的固定期权结构" },
+  { value: "0dte", label: "0DTE", title: "当日到期期权，数据以实际更新时间为准" },
+  { value: "d30", label: "30DTE", title: "DTE ≤ 30 聚合（包含当日到期）" },
+  { value: "d90", label: "90DTE", title: "DTE ≤ 90 聚合（包含当日到期与 30DTE）" },
+];
 
 export function DashboardToolbar({
   product,
   viewModel,
   onProductChange,
+  scopes,
+  onToggleScope,
   leading,
   productTrailing,
   trailing,
@@ -22,6 +32,9 @@ export function DashboardToolbar({
   product: OptionProduct;
   viewModel?: DashboardViewModel;
   onProductChange: (product: OptionProduct) => void;
+  /** 总控周期多选（至少 1 项，[0] 为主周期）；与 onToggleScope 同时提供才渲染 chips */
+  scopes?: OptionScope[];
+  onToggleScope?: (scope: OptionScope) => void;
   leading?: ReactNode;
   productTrailing?: ReactNode;
   trailing?: ReactNode;
@@ -42,6 +55,29 @@ export function DashboardToolbar({
             </option>
           ))}
         </select>
+        {scopes && onToggleScope ? (
+          <div className="ms-control flex p-0.5" aria-label="期权周期（多选，至少保留一项）">
+            {MASTER_SCOPE_CHIPS.map((chip) => {
+              const active = scopes.includes(chip.value);
+              return (
+                <button
+                  key={chip.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onToggleScope(chip.value)}
+                  title={chip.title}
+                  className={`h-7 rounded-md px-2 text-[11px] font-semibold transition-colors ${
+                    active
+                      ? "bg-[var(--ms-brand-dim)] text-[var(--ms-brand)]"
+                      : "text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {productTrailing}
         {viewModel?.spot !== undefined ? (
           <div className="font-mono text-[13px] font-bold tabular-nums text-[var(--ms-text-primary)]">

@@ -5,7 +5,7 @@ import type { OptionsDashboardResponse } from "@/api/options";
 
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
-  return route(async () => {
+  return route(async (signal) => {
     const { product, scope, query } = params(request);
     const date = query.get("date") ?? undefined;
     let asof: number | undefined;
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
       asof = sessionStart(next) - 3600; // 16:00 CT on requested date; DST handled by sessionStart.
     }
     // The same raw dashboard URL is cached/shared with the existing structure panels.
-    const data = await dashboard(product, scope, undefined, asof) as OptionsDashboardResponse;
+    const data = await dashboard(product, scope, undefined, asof, signal) as OptionsDashboardResponse;
     return buildIvTerm(data, product, scope, date);
-  });
+  }, request.signal);
 }

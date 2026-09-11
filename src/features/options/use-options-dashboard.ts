@@ -5,11 +5,14 @@ import {
   type OptionProduct,
   type OptionScope,
 } from "../../api/options";
+import { scopeStaleTimeMs } from "./data-freshness";
 
 export const optionsDashboardKeys = {
   all: ["options-dashboard"] as const,
-  detail: (product: OptionProduct, scope: OptionScope, days = 20) =>
-    [...optionsDashboardKeys.all, product, scope, days, 0.12] as const,
+  // days 缺省 = "auto"（BFF 按 scope 给默认口径：0dte=1/d30=30/d90=90/close=45），
+  // 前端不再恒传 20 顶掉服务端口径。
+  detail: (product: OptionProduct, scope: OptionScope, days?: number) =>
+    [...optionsDashboardKeys.all, product, scope, days ?? "auto", 0.12] as const,
 };
 
 export function useOptionsDashboard(
@@ -18,18 +21,13 @@ export function useOptionsDashboard(
   opts?: { enabled?: boolean; days?: number },
 ) {
   return useQuery({
-    queryKey: optionsDashboardKeys.detail(product, scope, opts?.days ?? 20),
+    queryKey: optionsDashboardKeys.detail(product, scope, opts?.days),
     queryFn: ({ signal }) => getOptionDashboard(product, scope, signal, opts?.days),
     // 06 内嵌 VP 条带（第二十轮）用 enabled 门控：VP 关时不取数
     enabled: opts?.enabled ?? true,
-    // R3：真实数据由快照版本驱动失效（useSnapshotSync），同版本不重复请求；
-    // 仅 local-demo（无采集器）保留 60s 轮询维持演示跳动
-    staleTime: 30_000,
-    refetchInterval: (query) =>
-      (query.state.data as { source?: string } | undefined)?.source === "local-demo"
-        ? 60_000
-        : false,
-    refetchIntervalInBackground: false,
+    // 刷新由 useSnapshotSync 版本失效驱动（data-freshness 调度器按档分频），本地不挂定时器。
+    // staleTime 与调度消费节奏对齐：挂载/本地恢复不比后端产出更勤地重拉。
+    staleTime: scopeStaleTimeMs(scope),
   });
 }
 
@@ -44,10 +42,7 @@ export function useOptionsDashboardMulti(
       queryKey: optionsDashboardKeys.detail(product, scope),
       queryFn: ({ signal }: { signal: AbortSignal }) => getOptionDashboard(product, scope, signal),
       enabled: Array.isArray(enabled) ? enabled[index] !== false : enabled,
-      staleTime: 30_000,
-      refetchInterval: ((query: { state: { data?: { source?: string } } }) =>
-        query.state.data?.source === "local-demo" ? 60_000 : false) as never,
-      refetchIntervalInBackground: false,
+      staleTime: scopeStaleTimeMs(scope),
     })),
   }) as Array<{
     data?: import("../../api/options").OptionsDashboardResponse;

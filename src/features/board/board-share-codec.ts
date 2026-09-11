@@ -36,6 +36,10 @@ export async function encodeBoardShare(payload: BoardDockPayload): Promise<strin
   return `v0.${bytesToBase64Url(bytes)}`;
 }
 
+const MAX_SHARE_BODY_CHARS = 64 * 1024;
+const MAX_SHARE_JSON_CHARS = 1024 * 1024;
+const MAX_SHARE_PANELS = 20;
+
 /** 校验口径与 applyPayload 一致：version/layout 存在 + panels 的 panelKey 全部在注册表内 */
 function isValidPayload(value: unknown): value is BoardDockPayload {
   if (!value || typeof value !== "object") return false;
@@ -44,12 +48,37 @@ function isValidPayload(value: unknown): value is BoardDockPayload {
   const panels = (payload.layout as { panels?: Record<string, { params?: { panelKey?: string } }> })
     .panels;
   if (panels && typeof panels === "object") {
-    for (const panel of Object.values(panels)) {
+    const entries = Object.values(panels);
+    if (entries.length > MAX_SHARE_PANELS) return false;
+    for (const panel of entries) {
       const panelKey = panel?.params?.panelKey;
       if (panelKey && !BOARD_PANELS.some((def) => def.key === panelKey)) return false;
     }
   }
   return true;
+}
+
+async function readStreamCapped(stream: ReadableStream<Uint8Array>, limit: number): Promise<string | null> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 export async function decodeBoardShare(text: string): Promise<BoardDockPayload | null> {
@@ -58,18 +87,20 @@ export async function decodeBoardShare(text: string): Promise<BoardDockPayload |
     if (dot < 0) return null;
     const tag = text.slice(0, dot);
     const body = text.slice(dot + 1);
-    let json: string;
+    if (body.length > MAX_SHARE_BODY_CHARS) return null;
+    let json: string | null;
     if (tag === "v1") {
       if (typeof DecompressionStream === "undefined") return null;
       const stream = new Blob([new Uint8Array(base64UrlToBytes(body))])
         .stream()
         .pipeThrough(new DecompressionStream("deflate"));
-      json = await new Response(stream).text();
+      json = await readStreamCapped(stream, MAX_SHARE_JSON_CHARS);
     } else if (tag === "v0") {
       json = new TextDecoder().decode(base64UrlToBytes(body));
     } else {
       return null;
     }
+    if (json === null) return null;
     const parsed: unknown = JSON.parse(json);
     return isValidPayload(parsed) ? parsed : null;
   } catch {

@@ -15,7 +15,6 @@ import {
   sanitizeUserFacingText,
 } from "@/lib/formatters";
 
-import { liveFocus, useBoardFocusStore } from "./board-focus-store";
 import { useBoardWindowStore } from "./board-window-store";
 import {
   buildChainMarks,
@@ -386,7 +385,7 @@ function SideDetail({
  * 09 期权链下钻：Strike 居中镜像表（左 Call 绿 / 右 Put 红），行点击摊开明细。
  * 到期切换独立于 board scope：组件内 useState，初始为空 = 后端选最小 DTE。
  */
-export function OptionsChainPanel({ model, panelId }: { model: OptionsChainModel; panelId: string }) {
+export function OptionsChainPanel({ model, panelId, visible: panelVisible = true }: { model: OptionsChainModel; panelId: string; visible?: boolean }) {
   const { product, tickSize } = model;
   const scope = model.scope ?? "0dte";
   const settlement = scope === "close";
@@ -395,11 +394,6 @@ export function OptionsChainPanel({ model, panelId }: { model: OptionsChainModel
   const [sort, setSort] = useState<ChainSortKey>("strike");
   const [showAll, setShowAll] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
-  // 05 下钻联动（第三十四轮 B5）：focus.expiry 命中本窗到期 tabs 则切过去并短暂高亮，
-  // 找不到就不动；at + 30s 后的陈旧 focus 忽略。最小侵入：只读 focus，不改自有到期选择语义。
-  const focus = useBoardFocusStore((s) => s.focus);
-  const focusHandledAtRef = useRef(0);
-  const [flashExpiry, setFlashExpiry] = useState<number | null>(null);
   // 列 LOD 实测（第三十一轮，面板自适应规范）：表格容器实测宽驱动砍列，首帧兜底全列
   const [measureRef, { width: measuredW }] = useMeasureSize<HTMLDivElement>();
   const tableW = measuredW > 0 ? measuredW : CHAIN_FALLBACK_W;
@@ -413,23 +407,9 @@ export function OptionsChainPanel({ model, panelId }: { model: OptionsChainModel
   const sideColCount = SIDE_HEADERS.length - hiddenCols.size;
 
   // expiration 为空时与 BoardView 的自动查询同 key（共享缓存）；选定到期后独立拉取
-  const query = useOptionsChain(product, expiration, scope);
+  const query = useOptionsChain(product, expiration, scope, panelVisible);
   const displayData = query.data ?? model.data;
   const switching = expiration !== undefined && query.data === undefined && query.isPending;
-
-  // 05 下钻联动消费（第三十四轮 B5）：过期/已处理/找不到到期三种情况都不动
-  useEffect(() => {
-    const live = liveFocus(focus);
-    if (!live?.expiry || live.at === focusHandledAtRef.current) return;
-    focusHandledAtRef.current = live.at;
-    const serie = displayData?.series.find((item) => item.expiration === live.expiry);
-    if (!serie) return;
-    setChainExpiration(panelId, serie.expiration);
-    setSelectedStrike(null);
-    setFlashExpiry(serie.expiration);
-    const timer = setTimeout(() => setFlashExpiry(null), 2000);
-    return () => clearTimeout(timer);
-  }, [focus, displayData, panelId, setChainExpiration]);
 
   const rowsAsc = useMemo(
     () => [...(displayData?.chain?.rows ?? [])].sort((a, b) => a.strike - b.strike),
@@ -599,7 +579,7 @@ export function OptionsChainPanel({ model, panelId }: { model: OptionsChainModel
                 on
                   ? "border-[var(--ms-brand)] bg-[var(--ms-brand)] text-black"
                   : "border-[var(--ms-separator)] text-[var(--ms-text-secondary)] hover:text-[var(--ms-text-primary)]"
-              } ${flashExpiry === serie.expiration ? "ring-2 ring-[var(--ms-brand)]" : ""}`}
+              }`}
             >
               {sanitizeUserFacingText(serie.label) || serie.kind} · {serie.days_to_expiration}D
             </button>

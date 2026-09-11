@@ -8,11 +8,12 @@ import type { OptionProduct, OptionScope } from "@/api/options";
  * 窗口配置 store（看板架构演进 步二后半 + 一·五节三维联动模型）。
  *
  * 三个维度联动机制：
- *  - 标的：顶部选择修改所有窗口；窗口选择只修改本窗，不反向修改主控。
- *  - 期权周期：master.scopes / perProductScope 保留数组形状兼容旧存档，但当前只存 1 项；
- *    联动开 = 所有窗口跟随标的级单选口径；
- *    解耦 = 窗内冻结自治（解耦瞬间快照当时有效值）。第三十一轮起 📌 scopePinned
- *    语义废除。联动按钮已移除，productLinked 仅保留既有周期口径兼容。
+ *  - 标的：顶部选择修改所有联动窗口；窗口选择只修改本窗并自动解耦。
+ *  - 期权周期：master.scopes / perProductScope 为多选数组（至少 1 项，
+ *    固定优先级 0dte>d30>d90>close，[0] 为主周期）；
+ *    联动开 = 窗口跟随标的级口径（table 类 chips 置灰）；
+ *    解耦 = 窗内冻结自治（解耦瞬间快照当时有效值）。🔗 chip 为唯一
+ *    联动开关（toggleProductLinked），重新联动时品种/周期同步回总控现行值。
  *  - K线周期：纯窗口私有（kPeriod），随布局持久化。
  *
  * 布局持久化 v3：windows / perProductScope / master 全部进 localStorage JSON
@@ -22,9 +23,9 @@ import type { OptionProduct, OptionScope } from "@/api/options";
 
 export interface WindowConfig {
   product: OptionProduct;
-  /** 旧存档字段，仅控制周期跟随/冻结；不再控制品种切换，UI 无联动开关。 */
+  /** 联动开关：捆绑品种+周期两维度——true=跟随总控，false=冻结窗内自治 */
   productLinked: boolean;
-  /** 线条类面板的周期单选（数组形状仅为旧存档兼容）；联动开时被标的级数组覆盖 */
+  /** 线条类面板的周期多选（解耦时窗内自治值，上限 WINDOW_SCOPES_MAX）；联动开时被标的级数组覆盖 */
   scopes: OptionScope[];
   /** 表格类面板的周期单值（解耦时的窗内冻结值；解耦瞬间快照当时有效值） */
   scope: OptionScope;
@@ -40,6 +41,10 @@ export interface WindowConfig {
   optionVolumeProfileEnabled: boolean;
   optionVolumeProfileVisible: boolean;
   optionVolumeProfileScope: OptionScope;
+  /** 06 底部 Exposure 剖面副图：已添加 / 眼睛可见 / 自己的单选周期。 */
+  exposureProfileEnabled: boolean;
+  exposureProfileVisible: boolean;
+  exposureProfileScope: OptionScope;
   /** 主图 Volume 指标是否已添加、是否可见。 */
   volumeIndicatorEnabled: boolean;
   volumeIndicatorVisible: boolean;
@@ -67,12 +72,12 @@ export interface WindowConfig {
 
 export interface BoardMaster {
   product: OptionProduct;
-  /** 当前周期单选（数组形状仅为旧存档兼容） */
+  /** 总控周期多选（至少 1 项，固定优先级排序，[0] 为主周期） */
   scopes: OptionScope[];
 }
 
 const PRODUCTS: OptionProduct[] = ["ES", "NQ", "GC"];
-const WINDOW_SCOPES_MAX = 4;
+const WINDOW_SCOPES_MAX = 3;
 
 const VALID_SCOPES: OptionScope[] = ["close", "0dte", "d30", "d90"];
 
@@ -106,7 +111,7 @@ function sanitizeScopeArray(value: unknown, fallback: OptionScope[]): OptionScop
   const normalized = raw.map((scope) => scope === "all" ? "d90" : scope);
   const filtered = normalized.filter((s): s is OptionScope => VALID_SCOPES.includes(s as OptionScope));
   const unique = [...new Set(filtered)];
-  return unique.length > 0 ? sortLineScopes(unique).slice(0, 1) : fallback.slice(0, 1);
+  return unique.length > 0 ? sortLineScopes(unique) : sortLineScopes(fallback);
 }
 
 /** 期权水位层允许四档复选；与全局/图表 scope 单选清洗分开。 */
@@ -119,7 +124,35 @@ function sanitizeLevelScopeArray(value: unknown, fallback: OptionScope[]): Optio
 }
 
 function defaultPerProductScope(): Record<OptionProduct, OptionScope[]> {
-  return { ES: ["0dte"], NQ: ["0dte"], GC: ["0dte"] };
+  // 出厂默认 = 收盘 EOD（2026-09-11 用户口径：EOD 是当日交易波段核心，
+  // 其他周期不默认开启，用户有需求自行多选/保存模板）
+  return { ES: ["close"], NQ: ["close"], GC: ["close"] };
+}
+
+/**
+ * 一次性默认迁移标记：旧出厂默认是 0dte，2026-09-11 起改为 close(EOD)。
+ * 仅当存档仍是旧出厂默认（master 与三品种全是 ["0dte"]，无自定义痕迹）才迁移；
+ * 用户自主选过周期（哪怕恰好只选 0dte 后保存）不重复迁移——flag 首次 hydrate 即写入。
+ */
+const SCOPE_DEFAULT_MIGRATED_KEY = "marsoon-scope-default-v2";
+
+function migrateScopeDefault(
+  master: BoardMaster,
+  perProductScope: Record<OptionProduct, OptionScope[]>,
+): { master: BoardMaster; perProductScope: Record<OptionProduct, OptionScope[]> } {
+  if (typeof localStorage === "undefined") return { master, perProductScope };
+  try {
+    if (localStorage.getItem(SCOPE_DEFAULT_MIGRATED_KEY)) return { master, perProductScope };
+    localStorage.setItem(SCOPE_DEFAULT_MIGRATED_KEY, "1");
+  } catch {
+    return { master, perProductScope };
+  }
+  const untouched =
+    master.scopes.length === 1 &&
+    master.scopes[0] === "0dte" &&
+    PRODUCTS.every((product) => perProductScope[product]?.length === 1 && perProductScope[product]?.[0] === "0dte");
+  if (!untouched) return { master, perProductScope };
+  return { master: { ...master, scopes: ["close"] }, perProductScope: defaultPerProductScope() };
 }
 
 interface BoardWindowState {
@@ -129,13 +162,13 @@ interface BoardWindowState {
 
   /** 面板渲染时确保配置存在（新加窗口给默认值：跟随主控品种 + 标的级 scope） */
   ensureWindow: (id: string) => void;
-  /** 主控（顶部工具条）：切品种 → 所有窗口跟随，忽略旧联动标志 */
+  /** 主控（顶部工具条）：切品种 → 所有联动窗口跟随（解耦窗冻结自治不动） */
   setMasterProduct: (product: OptionProduct) => void;
-  /** 主控周期切换：始终只保留目标 scope，同时写标的级 scope */
+  /** 主控周期多选切换：已选则移除（至少保留 1 项），未选则加入并按固定优先级排序，同时写标的级 scope */
   toggleMasterScope: (scope: OptionScope) => void;
   /** 主控周期整体注入（URL 深链 ?scope=0dte,d90），清洗后写主控 + 标的级 */
   setMasterScopes: (scopes: OptionScope[]) => void;
-  /** 窗口级：切品种只修改本窗，主控和其他窗口保持不变 */
+  /** 窗口级：切品种只修改本窗；联动窗切品种 = 解耦（冻结当时周期快照），主控和其他窗口保持不变 */
   setWindowProduct: (id: string, product: OptionProduct) => void;
   toggleProductLinked: (id: string) => void;
   /** 表格类单选（仅解耦态可用，chips 在联动态置灰）：只写本窗冻结值 */
@@ -151,6 +184,9 @@ interface BoardWindowState {
   setOptionVolumeProfileEnabled: (id: string, enabled: boolean) => void;
   setOptionVolumeProfileVisible: (id: string, visible: boolean) => void;
   setOptionVolumeProfileScope: (id: string, scope: OptionScope) => void;
+  setExposureProfileEnabled: (id: string, enabled: boolean) => void;
+  setExposureProfileVisible: (id: string, visible: boolean) => void;
+  setExposureProfileScope: (id: string, scope: OptionScope) => void;
   /** 06 内嵌 VP 条带宽度（clamp 60~240） */
   setVpW: (id: string, w: number) => void;
   setOptionLayerEnabled: (id: string, enabled: boolean) => void;
@@ -190,6 +226,9 @@ function defaultWindowConfig(state: Pick<BoardWindowState, "master" | "perProduc
     optionVolumeProfileEnabled: true,
     optionVolumeProfileVisible: true,
     optionVolumeProfileScope: "0dte",
+    exposureProfileEnabled: false,
+    exposureProfileVisible: true,
+    exposureProfileScope: scopes[0] ?? "0dte",
     volumeIndicatorEnabled: true,
     volumeIndicatorVisible: true,
     optionLayerEnabled: true,
@@ -231,7 +270,7 @@ export function effectiveLineScopes(
   if (config.productLinked) {
     const linked = perProductScope[config.product];
     if (linked && linked.length > 0) {
-      return sortLineScopes(linked).slice(0, 1);
+      return sortLineScopes(linked).slice(0, WINDOW_SCOPES_MAX);
     }
   }
   return config.scopes.slice(0, WINDOW_SCOPES_MAX);
@@ -264,6 +303,12 @@ function sanitizeWindows(
       optionVolumeProfileEnabled: config.optionVolumeProfileEnabled !== false,
       optionVolumeProfileVisible: config.optionVolumeProfileVisible !== false,
       optionVolumeProfileScope: config.optionVolumeProfileScope === "close" ? "close" : "0dte",
+      // 默认不添加（+指标 按需开启），旧档缺失字段 → false，不开指标不取数
+      exposureProfileEnabled: config.exposureProfileEnabled === true,
+      exposureProfileVisible: config.exposureProfileVisible !== false,
+      exposureProfileScope: VALID_SCOPES.includes(config.exposureProfileScope)
+        ? config.exposureProfileScope
+        : (config.optionLayerScopes?.[0] ?? scope),
       volumeIndicatorEnabled: config.volumeIndicatorEnabled !== false,
       volumeIndicatorVisible: config.volumeIndicatorVisible !== false,
       // 旧档无 vpW 字段 → undefined（默认 200）；已有过窄值迁移到 120，最大 400
@@ -294,7 +339,8 @@ function sanitizeWindows(
 }
 
 export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
-  master: { product: "NQ", scopes: ["0dte"] },
+  // 出厂默认周期 = 收盘 EOD（2026-09-11）；旧 0dte 默认存档在 hydrate 一次性迁移
+  master: { product: "NQ", scopes: ["close"] },
   perProductScope: defaultPerProductScope(),
   windows: {},
 
@@ -308,6 +354,7 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const state = get();
     const windows = { ...state.windows };
     for (const [id, config] of Object.entries(windows)) {
+      if (!config.productLinked) continue;
       windows[id] = { ...config, product, chainExpiration: undefined };
     }
     set({ master: { ...state.master, product }, windows });
@@ -315,7 +362,12 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
 
   toggleMasterScope: (scope) => {
     const state = get();
-    const sorted = [scope];
+    const current = state.master.scopes;
+    const sorted = current.includes(scope)
+      ? current.length === 1
+        ? current
+        : current.filter((item) => item !== scope)
+      : sortLineScopes([...current, scope]);
     set({
       master: { ...state.master, scopes: sorted },
       perProductScope: { ...state.perProductScope, [state.master.product]: sorted },
@@ -335,7 +387,20 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const state = get();
     const config = state.windows[id];
     if (!config) return;
-    set({ windows: { ...state.windows, [id]: { ...config, product, chainExpiration: undefined } } });
+    if (!config.productLinked) {
+      set({ windows: { ...state.windows, [id]: { ...config, product, chainExpiration: undefined } } });
+      return;
+    }
+    // 联动窗切品种 = 解耦（🔗 捆绑品种+周期两维度）：冻结当时有效周期快照
+    const linkedScopes = state.perProductScope[config.product];
+    const scope = linkedScopes?.[0] ?? config.scope;
+    const scopes =
+      linkedScopes && linkedScopes.length > 0
+        ? sortLineScopes(linkedScopes).slice(0, WINDOW_SCOPES_MAX)
+        : config.scopes;
+    set({
+      windows: { ...state.windows, [id]: { ...config, product, productLinked: false, scope, scopes, chainExpiration: undefined } },
+    });
   },
 
   toggleProductLinked: (id) => {
@@ -348,16 +413,27 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
       const scope = linkedScopes?.[0] ?? config.scope;
       const scopes =
         linkedScopes && linkedScopes.length > 0
-          ? sortLineScopes(linkedScopes).slice(0, 1)
+          ? sortLineScopes(linkedScopes).slice(0, WINDOW_SCOPES_MAX)
           : config.scopes;
       set({
         windows: { ...state.windows, [id]: { ...config, productLinked: false, scope, scopes } },
       });
       return;
     }
-    // 重新联动：窗内冻结值作废，跟随标的级口径
+    // 重新联动：冻结快照作废，品种/周期同步回总控现行值
+    const masterScopes = state.perProductScope[state.master.product] ?? state.master.scopes;
     set({
-      windows: { ...state.windows, [id]: { ...config, productLinked: true } },
+      windows: {
+        ...state.windows,
+        [id]: {
+          ...config,
+          productLinked: true,
+          product: state.master.product,
+          chainExpiration: undefined,
+          scope: masterScopes[0] ?? config.scope,
+          scopes: masterScopes.length > 0 ? sortLineScopes(masterScopes).slice(0, WINDOW_SCOPES_MAX) : config.scopes,
+        },
+      },
     });
   },
 
@@ -446,6 +522,18 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
     const config = state.windows[id];
     if (!config) return;
     set({ windows: { ...state.windows, [id]: { ...config, optionVolumeProfileScope: scope === "close" ? "close" : "0dte" } } });
+  },
+  setExposureProfileEnabled: (id, enabled) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, exposureProfileEnabled: enabled, exposureProfileVisible: enabled ? true : config.exposureProfileVisible } } });
+  },
+  setExposureProfileVisible: (id, visible) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, exposureProfileVisible: visible } } });
+  },
+  setExposureProfileScope: (id, scope) => {
+    const state = get(), config = state.windows[id]; if (!config) return;
+    set({ windows: { ...state.windows, [id]: { ...config, exposureProfileScope: scope } } });
   },
   setVpW: (id, w) => {
     const state = get();
@@ -549,16 +637,19 @@ export const useBoardWindowStore = create<BoardWindowState>((set, get) => ({
           ),
         }
       : get().master;
+    const migrated = migrateScopeDefault(master, perProductScope);
     set({
-      master,
-      perProductScope,
-      windows: sanitizeWindows(payload.windows, perProductScope),
+      master: migrated.master,
+      perProductScope: migrated.perProductScope,
+      windows: sanitizeWindows(payload.windows, migrated.perProductScope),
     });
   },
 
   prune: (liveIds) => {
     const state = get();
     const live = new Set(liveIds);
+    const before = Object.keys(state.windows);
+    if (before.length === live.size && before.every((id) => live.has(id))) return;
     const windows: Record<string, WindowConfig> = {};
     for (const [id, config] of Object.entries(state.windows)) {
       if (live.has(id)) windows[id] = config;

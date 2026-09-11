@@ -6,7 +6,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 const PRIVACY_TEXT = "我们非常重视您的隐私保护。当您使用我们的服务时，我们会收集和使用您的相关信息。我们将按照法律法规要求，采取相应安全保护措施，尽力保护您的个人信息安全可控。";
 
 function safeNext(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") && !value.startsWith("/login") ? value : "/board";
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/board";
+  if (value.startsWith("/login") || value.startsWith("/api")) return "/board";
+  return value;
 }
 
 async function responseMessage(response: Response, fallback: string) {

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import {
   ACTIVITY_KEYS,
+  ACTIVITY_MOUNT_GRACE_MS,
   ACTIVITY_RETRY_DELAY_MS,
   completeActivityEvent,
   pendingActivityEvent,
@@ -63,7 +64,8 @@ export function ClientActivityReporter({ enabled }: { enabled: boolean }) {
 
     const onVisibility = () => { if (document.visibilityState === "visible") void report(false); };
     const onOnline = () => { if (localStorage.getItem(ACTIVITY_KEYS.pendingEvent)) void report(true); };
-    void report(true);
+    const mountedAt = Number(localStorage.getItem(ACTIVITY_KEYS.lastReportedAt) ?? 0);
+    if (!Number.isFinite(mountedAt) || mountedAt <= 0 || Date.now() - mountedAt >= ACTIVITY_MOUNT_GRACE_MS) void report(true);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("online", onOnline);
     return () => {

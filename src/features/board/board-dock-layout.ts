@@ -30,6 +30,7 @@ export interface BoardDockPayload {
   windows: Record<string, WindowConfig>;
   perProductScope: Record<OptionProduct, OptionScope[]>;
   master: BoardMaster;
+  savedAt?: number;
 }
 
 function panelDef(panelKey: string) {
@@ -56,7 +57,7 @@ export function addBoardPanel(api: DockviewApi, panelKey: string) {
 }
 
 /**
- * 默认布局：日内 K线在左，GEX 拆分在右。其他面板仍可从“+ 面板”添加，
+ * 默认布局：仅日内单窗。其他面板仍可从“+ 面板”添加，
  * 用户主动保存的模板继续优先于自动存档和出厂布局。
  */
 export function buildDefaultLayout(api: DockviewApi) {
@@ -74,8 +75,7 @@ export function buildDefaultLayout(api: DockviewApi) {
     return id;
   };
 
-  const intraday = add("intraday");
-  add("gex", { referencePanel: intraday, direction: "right" });
+  add("intraday");
 }
 
 /** 采集当前布局 + 窗口配置为 payload（第三十三轮抽出，saveLayout/保存模板共用） */
@@ -93,9 +93,32 @@ export function capturePayload(api: DockviewApi): BoardDockPayload {
   };
 }
 
+let lastLayoutSavedAt = 0;
+
+function readStoredLayoutSavedAt(): number {
+  try {
+    const raw = window.localStorage.getItem(BOARD_DOCK_STORAGE_KEY);
+    if (!raw) return 0;
+    const savedAt = (JSON.parse(raw) as { savedAt?: unknown }).savedAt;
+    return typeof savedAt === "number" && Number.isFinite(savedAt) ? savedAt : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function saveLayout(api: DockviewApi) {
   try {
-    window.localStorage.setItem(BOARD_DOCK_STORAGE_KEY, JSON.stringify(capturePayload(api)));
+    const storedSavedAt = readStoredLayoutSavedAt();
+    if (storedSavedAt > lastLayoutSavedAt) {
+      lastLayoutSavedAt = storedSavedAt;
+      return;
+    }
+    const savedAt = Date.now();
+    window.localStorage.setItem(
+      BOARD_DOCK_STORAGE_KEY,
+      JSON.stringify({ ...capturePayload(api), savedAt }),
+    );
+    lastLayoutSavedAt = savedAt;
   } catch {
     // 存储不可用时静默降级（布局不持久）
   }
@@ -151,7 +174,11 @@ export function restoreLayout(api: DockviewApi): boolean {
   try {
     const raw = window.localStorage.getItem(BOARD_DOCK_STORAGE_KEY);
     if (!raw) return false;
-    return applyPayload(api, JSON.parse(raw) as BoardDockPayload);
+    const payload = JSON.parse(raw) as BoardDockPayload;
+    if (typeof payload.savedAt === "number" && payload.savedAt > lastLayoutSavedAt) {
+      lastLayoutSavedAt = payload.savedAt;
+    }
+    return applyPayload(api, payload);
   } catch {
     return false;
   }
@@ -188,6 +215,12 @@ function writeTemplateStore(store: BoardTemplateStore) {
   }
 }
 
+function updateTemplateStore(mutate: (store: BoardTemplateStore) => void) {
+  const store = readTemplateStore();
+  mutate(store);
+  writeTemplateStore(store);
+}
+
 /** 模板名校验（第三十三轮）：trim、≤24 字符、空名拒绝；store 层兜底，菜单层提示 */
 export function normalizeTemplateName(name: string): string | null {
   const trimmed = name.trim();
@@ -204,23 +237,23 @@ export function listBoardTemplates(): { name: string; savedAt: string }[] {
 export function saveBoardTemplate(name: string, payload: BoardDockPayload): boolean {
   const trimmed = normalizeTemplateName(name);
   if (!trimmed) return false;
-  const store = readTemplateStore();
-  store.templates[trimmed] = { savedAt: new Date().toISOString(), payload };
-  writeTemplateStore(store);
+  updateTemplateStore((store) => {
+    store.templates[trimmed] = { savedAt: new Date().toISOString(), payload };
+  });
   return true;
 }
 
 export function deleteBoardTemplate(name: string) {
-  const store = readTemplateStore();
-  delete store.templates[name];
-  if (store.defaultName === name) store.defaultName = null;
-  writeTemplateStore(store);
+  updateTemplateStore((store) => {
+    delete store.templates[name];
+    if (store.defaultName === name) store.defaultName = null;
+  });
 }
 
 export function setDefaultBoardTemplate(name: string | null) {
-  const store = readTemplateStore();
-  store.defaultName = name && store.templates[name] ? name : null;
-  writeTemplateStore(store);
+  updateTemplateStore((store) => {
+    store.defaultName = name && store.templates[name] ? name : null;
+  });
 }
 
 export function getDefaultTemplateName(): string | null {

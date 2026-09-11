@@ -16,7 +16,7 @@ import {
   useOptionsDashboardMulti,
 } from "@/features/options/use-options-dashboard";
 import { useOptionsChain, useOptionsChainMulti } from "@/features/options/use-options-chain";
-import { useOptionsCandleStream, useOptionsIntradayBars, useOptionsIntradayMulti } from "@/features/options/use-options-intraday";
+import { useOptionsCandleStream, useOptionsCandleTail, useOptionsIntradayBars, useOptionsIntradayMulti } from "@/features/options/use-options-intraday";
 import { useOptionVolumeProfile } from "@/features/options/use-option-volume-profile";
 import { useOptionsTermMulti } from "@/features/options/use-options-term";
 
@@ -25,14 +25,12 @@ import {
   type HeatmapExpiryMode,
 } from "./expiration-heatmap-model";
 import { ExpirationHeatmapPanel } from "./ExpirationHeatmapPanel";
+import { buildExposureProfileModel } from "./exposure-profile-model";
 import { buildGexBreakdownModel } from "./gex-breakdown-model";
-import { GexBreakdownPanel } from "./GexBreakdownPanel";
 import { IntradayPanel } from "./IntradayPanel";
 import { buildOptionVolumeProfileModel } from "./option-volume-profile-model";
 import { buildOptionsChainModel } from "./options-chain-model";
 import { OptionsChainPanel } from "./OptionsChainPanel";
-import { buildOverviewModel } from "./overview-model";
-import { OverviewPanel } from "./OverviewPanel";
 import { buildChainSmileModel, buildSmileSkewModel } from "./smile-skew-model";
 import { SmileSkewPanel } from "./SmileSkewPanel";
 import { TermSpreadPanel } from "./TermSpreadPanel";
@@ -43,8 +41,6 @@ import {
   useBoardWindowStore,
 } from "./board-window-store";
 import { WindowToolbar, WindowToolbarControls } from "./WindowToolbar";
-import { SpotFollowButton } from "./spot-follow-button";
-import { useSpotFollow } from "./use-spot-follow";
 import { useCmeTradingDayKey } from "@/features/options/trading-day-refresh";
 
 /** 收盘档统一空态：收盘数据未接入，不报错、不造数 */
@@ -75,76 +71,6 @@ function useWindowConfig(panelId: string) {
   return useBoardWindowStore((s) => s.windows[panelId]);
 }
 
-/**
- * 01 总览：口径固定跟随顶部主控（品种 + 全局多选的主周期）——
- * 概览面板语义锚定"当前主品种的全局口径"，不参与单窗解耦（演进文档五节决策，本轮从简）。
- */
-export function OverviewWindow() {
-  const master = useBoardWindowStore((s) => s.master);
-  // 表格类/单值消费：取多选中最高优先级（排序后 [0]）当主周期
-  const scope = master.scopes[0] ?? "0dte";
-  const query = useOptionsDashboard(master.product, scope);
-  const model = useMemo(
-    () =>
-      query.data && query.data.has_data !== false
-        ? buildOverviewModel(buildDashboardViewModel(query.data, scope))
-        : undefined,
-    [query.data, scope],
-  );
-  if (query.isPending) return <LoadingState text="加载总览中…" />;
-  if (scope === "close" && query.data?.has_data === false) return <ClosePendingState />;
-  // 真自适应（面板自适应规范）：01 为纯 DOM 面板、宽度天然弹性，根容器 overflow-hidden 兜底防溢出
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="min-h-0 flex-1">{model ? <OverviewPanel model={model} /> : <LoadingState text={query.isError ? "数据加载失败，请稍后重试。" : query.data?.missing_reason ?? "当前周期暂无总览数据"} />}</div>
-    </div>
-  );
-}
-
-/** 表格类窗口骨架：窗口工具行 + 单选 scope（📌）+ 各自的 dashboard 消费 */
-function TableDashWindow({
-  panelId,
-  name,
-  children,
-  toolbarTrailing,
-}: {
-  panelId: string;
-  name: string;
-  children: (viewModel: DashboardViewModel) => React.ReactNode;
-  toolbarTrailing?: React.ReactNode;
-}) {
-  const config = useWindowConfig(panelId);
-  const perProductScope = useBoardWindowStore((s) => s.perProductScope);
-  const product = config?.product ?? "NQ";
-  const scope = config ? effectiveTableScope(config, perProductScope) : "0dte";
-  const query = useOptionsDashboard(product, scope);
-  const viewModel = useMemo(
-    () =>
-      query.data && query.data.has_data !== false
-        ? buildDashboardViewModel(query.data, scope)
-        : undefined,
-    [query.data, scope],
-  );
-  // 真自适应（面板自适应规范）：flex 高度链撑满窗口；不加 overflow-hidden——
-  // 05/08 为内容纵向滚动型（行数 × 固定行高），滚动由 DockPanelBody 承载（08 例外同口径）
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <WindowToolbar panelId={panelId} kind="table" trailing={toolbarTrailing} />
-      <div className="min-h-0 flex-1">
-        {query.isPending ? (
-          <LoadingState text={`加载${name}中…`} />
-        ) : scope === "close" && query.data?.has_data === false ? (
-          <ClosePendingState />
-        ) : viewModel ? (
-          children(viewModel)
-        ) : (
-          <LoadingState text={query.isError ? "数据加载失败，请稍后重试。" : query.data?.missing_reason ?? `当前周期暂无${name}数据`} />
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** 05 视图：固定EOD数据，面板内切换0DTE/最近到期与全部真实到期列。 */
 function ExpirationHeatmapView({
   vm,
@@ -162,14 +88,14 @@ function ExpirationHeatmapView({
 }
 
 /** 05 到期热力图：近月用 0DTE 表面，全部到期用 all/90 天表面。 */
-export function ExpirationWindow({ panelId }: { panelId: string }) {
+export function ExpirationWindow({ panelId, visible = true }: { panelId: string; visible?: boolean }) {
   const config = useWindowConfig(panelId);
   const product = config?.product ?? "NQ";
   const expiryMode = config?.heatmapExpiryMode ?? "front";
   const setHeatmapExpiryMode = useBoardWindowStore((s) => s.setHeatmapExpiryMode);
   const tradingDay = useCmeTradingDayKey();
   const heatScope = expiryMode === "front" ? "0dte" : "d90";
-  const primary = useOptionsDashboard(product, heatScope, { days: expiryMode === "front" ? 1 : 90 });
+  const primary = useOptionsDashboard(product, heatScope, { days: expiryMode === "front" ? 1 : 90, enabled: visible });
   const viewModel = useMemo(
     () =>
       primary.data && primary.data.has_data !== false
@@ -195,21 +121,8 @@ export function ExpirationWindow({ panelId }: { panelId: string }) {
   );
 }
 
-export function GexWindow({ panelId }: { panelId: string }) {
-  const spotFollow = useSpotFollow<HTMLDivElement>();
-  return (
-    <TableDashWindow
-      panelId={panelId}
-      name="GEX 拆分"
-      toolbarTrailing={<SpotFollowButton follow={spotFollow.follow} onToggle={spotFollow.toggleFollow} />}
-    >
-      {(vm) => <GexBreakdownPanel model={buildGexBreakdownModel(vm)} spotFollow={spotFollow} />}
-    </TableDashWindow>
-  );
-}
-
 /** 07 微笑偏斜（线条类）：多 scope 叠加——主 scope 实线，其余虚线低透明度；联动开时跟随总控 */
-export function SmileWindow({ panelId }: { panelId: string }) {
+export function SmileWindow({ panelId, visible = true }: { panelId: string; visible?: boolean }) {
   const config = useWindowConfig(panelId);
   const perProductScope = useBoardWindowStore((s) => s.perProductScope);
   const product = config?.product ?? "NQ";
@@ -219,13 +132,13 @@ export function SmileWindow({ panelId }: { panelId: string }) {
   );
   const selectedSeries = config?.smileSelectedSeries ?? {};
   const setSmileSelectedSeries = useBoardWindowStore((s) => s.setSmileSelectedSeries);
-  const results = useOptionsChainMulti(product, scopes, selectedSeries);
+  const results = useOptionsChainMulti(product, scopes, selectedSeries, visible);
   const dashboardFallbackEnabled = results.map((result, index) => {
     if (result.isPending) return false;
     const data = result.data;
     return !data || data.has_data === false || !buildChainSmileModel(data, product, scopes[index]!)?.points.length;
   });
-  const dashResults = useOptionsDashboardMulti(product, scopes, dashboardFallbackEnabled);
+  const dashResults = useOptionsDashboardMulti(product, scopes, visible ? dashboardFallbackEnabled : false);
   const models = useMemo(
     () =>
       scopes.map((scope, i) => {
@@ -266,7 +179,7 @@ export function SmileWindow({ panelId }: { panelId: string }) {
 }
 
 /** 06 日内变化（线条类）：多 scope 叠加 + 窗口私有 K 线周期；联动开时跟随总控 */
-export function IntradayWindow({ panelId }: { panelId: string }) {
+export function IntradayWindow({ panelId, visible = true }: { panelId: string; visible?: boolean }) {
   const config = useWindowConfig(panelId);
   const perProductScope = useBoardWindowStore((s) => s.perProductScope);
   const product = config?.product ?? "NQ";
@@ -280,6 +193,9 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const gexProfileVisible = config?.gexProfileVisible !== false;
   const optionVolumeProfileEnabled = config?.optionVolumeProfileEnabled !== false;
   const optionVolumeProfileVisible = config?.optionVolumeProfileVisible !== false;
+  const exposureProfileEnabled = config?.exposureProfileEnabled !== false;
+  const exposureProfileVisible = config?.exposureProfileVisible !== false;
+  const exposureScope = config?.exposureProfileScope ?? "0dte";
   const profileScope = config?.gexProfileScope === "close" ? "close" : "0dte";
   const volumeProfileScope = config?.optionVolumeProfileScope === "close" ? "close" : "0dte";
   const scopes = useMemo(
@@ -296,6 +212,9 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const setOptionVolumeProfileEnabled = useBoardWindowStore((s) => s.setOptionVolumeProfileEnabled);
   const setOptionVolumeProfileVisible = useBoardWindowStore((s) => s.setOptionVolumeProfileVisible);
   const setOptionVolumeProfileScope = useBoardWindowStore((s) => s.setOptionVolumeProfileScope);
+  const setExposureProfileEnabled = useBoardWindowStore((s) => s.setExposureProfileEnabled);
+  const setExposureProfileVisible = useBoardWindowStore((s) => s.setExposureProfileVisible);
+  const setExposureProfileScope = useBoardWindowStore((s) => s.setExposureProfileScope);
   const setVolumeIndicatorEnabled = useBoardWindowStore((s) => s.setVolumeIndicatorEnabled);
   const setVolumeIndicatorVisible = useBoardWindowStore((s) => s.setVolumeIndicatorVisible);
   const toggleOptionLayerScope = useBoardWindowStore((s) => s.toggleOptionLayerScope);
@@ -303,27 +222,35 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
   const setHistoryWindow = useBoardWindowStore((s) => s.setHistoryWindow);
   const historyDays = config?.historyDays ?? 1;
   const historyOffsetDays = config?.historyOffsetDays ?? 0;
-  const barsQuery = useOptionsIntradayBars(product, historyDays, historyOffsetDays);
+  const barsQuery = useOptionsIntradayBars(product, historyDays, historyOffsetDays, visible);
+  // 整窗历史只拉一次；每分钟的增量走尾部小窗（3KB）而非重传 24h（142KB）
+  useOptionsCandleTail(product, historyDays, historyOffsetDays, visible);
   useOptionsCandleStream(
     product,
     barsQuery.data?.candle_underlying_symbol ?? barsQuery.data?.underlying_symbol,
     historyDays,
     historyOffsetDays,
+    visible,
   );
-  const intradayResults = useOptionsIntradayMulti(product, scopes, historyDays, historyOffsetDays);
-  const levelDashboardResults = useOptionsDashboardMulti(product, levelLayerEnabled ? layerScopes : []);
+  const intradayResults = useOptionsIntradayMulti(product, scopes, historyDays, historyOffsetDays, visible);
+  const levelDashboardResults = useOptionsDashboardMulti(product, levelLayerEnabled ? layerScopes : [], visible);
+  // K 线是期货价格，与期权档位无关：挂在"承载 K 线的那个 scope"上（优先 0DTE，其次主档）。
+  // 原先写死只给 0dte 合并，导致只勾 30DTE/90DTE 时该窗口整块 K 线为空。
+  const barsScope = scopes.includes("0dte") ? "0dte" : scopes[0];
   const results = useMemo(
     () => scopes.map((scope, index) => {
       const base = intradayResults[index];
       const dashboard = levelDashboardResults[layerScopes.indexOf(scope)]?.data;
-      const withCandles = scope === "0dte" ? mergeCandlePayload(base?.data, barsQuery.data) : base?.data;
+      const withCandles = scope === barsScope ? mergeCandlePayload(base?.data, barsQuery.data) : base?.data;
       return {
-        data: mergeDashboardCurrent(withCandles, dashboard),
-        isPending: !withCandles && !!base?.isPending && (scope !== "0dte" || barsQuery.isPending),
-        isError: !withCandles && !!base?.isError && (scope !== "0dte" || barsQuery.isError),
+        // 历史回看窗（offsetDays>0）跳过实时 dashboard 叠加：水位层显示历史 asof 原值，
+        // 避免"今天的墙画在昨天的图上"（SPOT 又是历史末根收盘，语义矛盾）。
+        data: historyOffsetDays > 0 ? withCandles : mergeDashboardCurrent(withCandles, dashboard),
+        isPending: !withCandles && !!base?.isPending && (scope !== barsScope || barsQuery.isPending),
+        isError: !withCandles && !!base?.isError && (scope !== barsScope || barsQuery.isError),
       };
     }),
-    [scopes, intradayResults, barsQuery.data, barsQuery.isPending, barsQuery.isError, levelDashboardResults, layerScopes],
+    [scopes, intradayResults, barsQuery.data, barsQuery.isPending, barsQuery.isError, levelDashboardResults, layerScopes, barsScope, historyOffsetDays],
   );
   // 06 内嵌 VP 条带（第二十轮，替代已废弃的 06↔08 跨窗 VP 联动）：
   // 08 同源 GEX 模型——当前品种 + 主周期（多选中固定优先级最高者）dashboard + buildGexBreakdownModel。
@@ -340,7 +267,7 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
         )[0] ?? layerScopes[0] ?? "0dte",
     [layerScopes],
   );
-  const vpQuery = useOptionsDashboard(product, profileScope, { enabled: vpOn && gexProfileVisible });
+  const vpQuery = useOptionsDashboard(product, profileScope, { enabled: visible && vpOn && gexProfileVisible });
   const barsSource = pickIntradayBars(scopes.map((scope, i) => ({scope, data: results[i]?.data})), primaryScope);
   const barSymbol = candleUnderlying(barsSource);
   const optionVolumeRange = useMemo(() => {
@@ -352,7 +279,7 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
     const last = barsSource?.bars.at(-1)?.unix;
     return first && last ? { from: first, to: last + 60 } : undefined;
   }, [volumeProfileScope, barsSource?.bars]);
-  const optionVolumeQuery = useOptionVolumeProfile(product, optionVolumeRange?.from, optionVolumeRange?.to, optionVolumeProfileEnabled && optionVolumeProfileVisible);
+  const optionVolumeQuery = useOptionVolumeProfile(product, optionVolumeRange?.from, optionVolumeRange?.to, visible && optionVolumeProfileEnabled && optionVolumeProfileVisible);
   const vpModel = useMemo(() => {
     if (!vpQuery.data || vpQuery.data.has_data === false || (!vpQuery.data.portfolio && !sameUnderlying(vpQuery.data.market_state?.underlying_symbol, barSymbol))) return undefined;
     return buildGexBreakdownModel(buildDashboardViewModel(vpQuery.data, profileScope));
@@ -363,6 +290,15 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
     const model = buildOptionVolumeProfileModel(data);
     return model.rows.length ? model : undefined;
   }, [optionVolumeQuery.data]);
+  // 06 底部 Exposure 剖面副图：未添加或眼睛关闭时不发 dashboard 请求（同 vpOn && gexProfileVisible 门控先例）
+  const exposureQuery = useOptionsDashboard(product, exposureScope, { enabled: visible && exposureProfileEnabled && exposureProfileVisible });
+  const exposureModel = useMemo(
+    () =>
+      exposureQuery.data && exposureQuery.data.has_data !== false
+        ? buildExposureProfileModel(buildDashboardViewModel(exposureQuery.data, exposureScope))
+        : undefined,
+    [exposureQuery.data, exposureScope],
+  );
   return (
     // 真自适应（第十九轮）：flex 高度链 + overflow-hidden，06 面板精确填满窗口、不出滚动条
     // 布局极致简约化 C：WindowToolbar 外壳不再单列一行，控件本体注入 IntradayPanel 与图表工具控件并单行
@@ -398,6 +334,13 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
           volumeProfileScope={volumeProfileScope}
           onVolumeProfileScopeChange={(scope) => setOptionVolumeProfileScope(panelId, scope)}
           optionVolumeModel={optionVolumeModel}
+          exposureProfileEnabled={exposureProfileEnabled}
+          onExposureProfileEnabled={(enabled) => setExposureProfileEnabled(panelId, enabled)}
+          exposureProfileVisible={exposureProfileVisible}
+          onExposureProfileVisible={(visible) => setExposureProfileVisible(panelId, visible)}
+          exposureScope={exposureScope}
+          onExposureScopeChange={(scope) => setExposureProfileScope(panelId, scope)}
+          exposureModel={exposureModel}
           onToggleLayerScope={(scope) => toggleOptionLayerScope(panelId, scope)}
           historyDays={historyDays}
           historyOffsetDays={historyOffsetDays}
@@ -414,12 +357,12 @@ export function IntradayWindow({ panelId }: { panelId: string }) {
 /** 09 期权链（chain 类，第三十一轮）：周期统一顶栏总控，窗内不再有周期 chips；
  *  联动 = 跟随总控主周期（close 档整窗空态）；解耦 = 冻结解耦瞬间的周期快照（toggleProductLinked 内固化）；
  *  工具行只剩品种 select + 🔗chip */
-export function ChainWindow({ panelId }: { panelId: string }) {
+export function ChainWindow({ panelId, visible = true }: { panelId: string; visible?: boolean }) {
   const config = useWindowConfig(panelId);
   const perProductScope = useBoardWindowStore((s) => s.perProductScope);
   const product = config?.product ?? "NQ";
   const scope = config ? effectiveTableScope(config, perProductScope) : "0dte";
-  const chainQuery = useOptionsChain(product, undefined, scope);
+  const chainQuery = useOptionsChain(product, undefined, scope, visible && config?.chainExpiration === undefined);
   const model = useMemo(
     () => buildOptionsChainModel(product, chainQuery.data, scope),
     [product, scope, chainQuery.data],
@@ -428,19 +371,19 @@ export function ChainWindow({ panelId }: { panelId: string }) {
   return (
     <div>
       <WindowToolbar panelId={panelId} kind="chain" />
-      {chainQuery.isPending ? (
+      {config?.chainExpiration === undefined && chainQuery.isPending ? (
         <LoadingState text="加载期权链中…" />
-      ) : scope === "close" && chainQuery.data?.has_data === false ? (
+      ) : config?.chainExpiration === undefined && scope === "close" && chainQuery.data?.has_data === false ? (
         <ClosePendingState />
       ) : (
-        <OptionsChainPanel key={`${product}:${scope}`} panelId={panelId} model={model} />
+        <OptionsChainPanel key={`${product}:${scope}`} panelId={panelId} model={model} visible={visible} />
       )}
     </div>
   );
 }
 
 /** 10 月间价差 · PCR（线条类）：多 scope 叠加（第二 scope 起虚线+低透明度）；联动开时跟随总控 */
-export function SpreadWindow({ panelId }: { panelId: string }) {
+export function SpreadWindow({ panelId, visible = true }: { panelId: string; visible?: boolean }) {
   const config = useWindowConfig(panelId);
   const view = config?.spreadView ?? "iv";
   const setSpreadView = useBoardWindowStore((s) => s.setSpreadView);
@@ -450,7 +393,7 @@ export function SpreadWindow({ panelId }: { panelId: string }) {
     () => (config ? effectiveLineScopes(config, perProductScope) : ["d90" as OptionScope]),
     [config, perProductScope],
   );
-  const results = useOptionsTermMulti(product, view === "pcr" ? scopes : [], true);
+  const results = useOptionsTermMulti(product, view === "pcr" ? scopes : [], true, visible);
   // 真自适应（面板自适应规范）：flex 高度链 + overflow-hidden，10 精确填满窗口不出滚动条
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -459,7 +402,7 @@ export function SpreadWindow({ panelId }: { panelId: string }) {
         {([['iv', 'IV 期限结构'], ['pcr', '价差 / PCR']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setSpreadView(panelId, value)} className={`ms-control h-7 px-2 text-[11px] font-semibold ${view === value ? 'text-[var(--ms-brand)]' : 'text-[var(--ms-text-secondary)]'}`}>{label}</button>)}
       </div>
       <div className="min-h-0 flex-1">
-        {view === "iv" ? <IvTermPanel key={`${product}:${scopes[0]}`} panelId={panelId} product={product} scope={scopes[0] ?? "d90"} /> : <TermSpreadPanel product={product} scopes={scopes} results={results} />}
+        {view === "iv" ? <IvTermPanel key={`${product}:${scopes[0]}`} panelId={panelId} product={product} scope={scopes[0] ?? "d90"} visible={visible} /> : <TermSpreadPanel product={product} scopes={scopes} results={results} />}
       </div>
     </div>
   );

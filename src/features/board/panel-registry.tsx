@@ -3,9 +3,7 @@ import type { ReactNode } from "react";
 import {
   ChainWindow,
   ExpirationWindow,
-  GexWindow,
   IntradayWindow,
-  OverviewWindow,
   SmileWindow,
   SpreadWindow,
 } from "./panel-wrappers";
@@ -23,19 +21,10 @@ export interface BoardPanelDef {
   implemented: boolean;
   /** 12 列网格下的默认位置（初稿布局） */
   defaultLayout: { x: number; y: number; w: number; h: number; minW?: number; minH?: number };
-  render: (panelId: string) => ReactNode;
+  render: (panelId: string, visible?: boolean) => ReactNode;
 }
 
 export const BOARD_PANELS: BoardPanelDef[] = [
-  {
-    key: "overview",
-    title: "01 总览 Overview",
-    subtitle: "REGIME SNAPSHOT",
-    chipLabel: "总览",
-    implemented: true,
-    defaultLayout: { x: 0, y: 0, w: 12, h: 13, minW: 6, minH: 6 },
-    render: () => <OverviewWindow />,
-  },
   {
     key: "expiration",
     title: "05 到期热力图 Expiration",
@@ -43,7 +32,7 @@ export const BOARD_PANELS: BoardPanelDef[] = [
     chipLabel: "热力图",
     implemented: true,
     defaultLayout: { x: 0, y: 13, w: 6, h: 14, minW: 4, minH: 7 },
-    render: (panelId) => <ExpirationWindow panelId={panelId} />,
+    render: (panelId, visible) => <ExpirationWindow panelId={panelId} visible={visible} />,
   },
   {
     key: "intraday",
@@ -52,7 +41,7 @@ export const BOARD_PANELS: BoardPanelDef[] = [
     chipLabel: "日内",
     implemented: true,
     defaultLayout: { x: 6, y: 13, w: 6, h: 14, minW: 4, minH: 7 },
-    render: (panelId) => <IntradayWindow panelId={panelId} />,
+    render: (panelId, visible) => <IntradayWindow panelId={panelId} visible={visible} />,
   },
   {
     key: "volatility",
@@ -61,16 +50,7 @@ export const BOARD_PANELS: BoardPanelDef[] = [
     chipLabel: "波动率",
     implemented: true,
     defaultLayout: { x: 0, y: 27, w: 6, h: 11, minW: 4, minH: 7 },
-    render: (panelId) => <SmileWindow panelId={panelId} />,
-  },
-  {
-    key: "gex",
-    title: "08 Call / Put GEX 拆分",
-    subtitle: "PER-STRIKE DEALER GEX",
-    chipLabel: "GEX 拆分",
-    implemented: true,
-    defaultLayout: { x: 6, y: 27, w: 6, h: 14, minW: 4, minH: 7 },
-    render: (panelId) => <GexWindow panelId={panelId} />,
+    render: (panelId, visible) => <SmileWindow panelId={panelId} visible={visible} />,
   },
   {
     key: "chain",
@@ -80,7 +60,7 @@ export const BOARD_PANELS: BoardPanelDef[] = [
     implemented: true,
     // 镜像表 + 下钻明细需要横向空间，默认占整行
     defaultLayout: { x: 0, y: 41, w: 12, h: 13, minW: 6, minH: 8 },
-    render: (panelId) => <ChainWindow panelId={panelId} />,
+    render: (panelId, visible) => <ChainWindow panelId={panelId} visible={visible} />,
   },
   {
     key: "spread",
@@ -89,6 +69,6 @@ export const BOARD_PANELS: BoardPanelDef[] = [
     chipLabel: "月间价差",
     implemented: true,
     defaultLayout: { x: 0, y: 54, w: 6, h: 11, minW: 4, minH: 7 },
-    render: (panelId) => <SpreadWindow panelId={panelId} />,
+    render: (panelId, visible) => <SpreadWindow panelId={panelId} visible={visible} />,
   },
 ];

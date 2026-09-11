@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { AuthBackendError, applyAuthCookies, callAuthBackend, clearAuthCookies, type AuthBackendResult, validateAccessToken } from "@/server/auth-bff";
+import { AuthBackendError, applyAuthCookies, clearAuthCookies, refreshAuthSession, type AuthBackendResult, validateAccessToken } from "@/server/auth-bff";
 import { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE, AUTH_SESSION_COOKIE, accessTokenExpiration, verifyAuthSession } from "@/server/auth-session";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +14,14 @@ export async function GET(request: NextRequest) {
   const refreshToken = request.cookies.get(AUTH_REFRESH_COOKIE)?.value;
   if (refreshToken) {
     try {
-      const auth = await callAuthBackend("/auth/refresh", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }) }) as AuthBackendResult;
-      if (!auth?.access_token) throw new AuthBackendError("刷新响应缺少访问令牌");
+      const auth = await refreshAuthSession(refreshToken);
       const response = NextResponse.json({ authenticated: true, user: auth.user ?? null });
       await applyAuthCookies(response, auth, session?.email ?? "");
       return response;
-    } catch {
-      // Fall through to one last access-token validation before clearing.
+    } catch (error) {
+      if (!(error instanceof AuthBackendError) || (error.status !== 401 && error.status !== 400)) {
+        return NextResponse.json({ authenticated: false }, { status: 503 });
+      }
     }
   }
 
@@ -32,8 +33,10 @@ export async function GET(request: NextRequest) {
       const response = NextResponse.json({ authenticated: true, user });
       await applyAuthCookies(response, auth, user.email);
       return response;
-    } catch {
-      // Invalid or revoked access token.
+    } catch (error) {
+      if (!(error instanceof AuthBackendError) || (error.status !== 401 && error.status !== 400)) {
+        return NextResponse.json({ authenticated: false }, { status: 503 });
+      }
     }
   }
 
