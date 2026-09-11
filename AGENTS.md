@@ -32,7 +32,7 @@ CME 期货期权看板（ES/NQ/GC）。**数据源唯一：Go 期权服务**（`
 > 2026-09-11（面板收敛：01/08 删除、05 跳足迹图、06 新增 Exposure 副图）：**01 总览与 08 GEX 拆分两个面板整体删除**（注册表条目、wrapper、组件、模型、出厂布局、相关测试脚本全删；`TableDashWindow` 骨架随之删除）。原 01 的 Exposure 剖面图（OI/GEX/DEX/CHEX 模式切换）挪为 **06 底部独立副图指标「Exposure 剖面」**（`ExposureProfilePane.tsx` + `exposure-profile-model.ts` + `strike-viewport.ts`（原 overview-viewport 改名，07/10 IvTermPanel 仍在用）），窗口配置 `exposureProfileEnabled/Visible/Scope`，**默认未添加，仅从「+ 指标」按需开启；未添加或眼睛关闭时不发 dashboard 请求**（`enabled: visible && enabled && visible` 门控，与 vpQuery 同 key 时自动去重）。**05 热力图点击（列头/行头/格子）改为新标签页打开订单流足迹图外链 `https://subapp.marsoon.cn/`（不带参数）**，原 05→09/08 下钻联动全链路删除（`board-focus-store.ts` 整删，09 的 flashExpiry 消费移除；09 面板本身保留）。老布局存档/模板含 `gex`/`overview` 面板时走既有"未知面板整档作废"回退出厂布局；出厂布局改为仅日内单窗。
 
 > 2026-09-11（首屏提速：本地持久化 + 口径错位修复）：大快照（dashboard/intraday/levels/term/chain/VP）成功响应持久化到 IndexedDB（`src/features/options/query-persistence.ts`，24h 寿命，bars-tail 不入库），`providers.tsx` 启动门控先灌缓存再挂载业务树；调度器 `scopeStates` 持久化到 localStorage（`marsoon-scope-states-v1`）+ 首见基线修正（缓存取数时间早于 version unix 则首拍强制补拉）——**快照 unix 没变时重开页面零重请求、EOD/K线秒开**；`refetchOnWindowFocus` 全站关闭，各 hook staleTime 与调度消费节奏对齐（`scopeStaleTimeMs`）。P1 修复：dashboard 前端不再恒传 days=20（由 BFF `defaultDashboardDays` 按 scope 给口径 1/30/90/45）；close 档 levels 不再用 now-1h 错位窗口（BFF 锚定 close 快照 unix 取窗）；BFF term 0dte 扇出改并发（最坏 140s→85s，不再顶爆 115s 路由预算）。设计细节：`docs/architecture/K线与期权数据周期管理与防堵塞设计.md` §九。
-> 2026-09-12（首载节流：面板懒加载 + 静态缓存头）：`panel-registry` 五个窗口改 `next/dynamic` 异步 chunk（出厂布局首窗挂载时按序加载，骨架屏无感），lightweight-charts（104KB gz）退出 /board 首载——构建实测 board 首载 **297→203KB gz**；login/teaching 186~187KB 不变。`next.config.ts` 新增 `/teaching-content` 长缓存头（1h+SWR）与 `poweredByHeader:false`。部署侧剩余项（反代 gzip/br、HTTP/2/3、CDN、多 scope 聚合端点）录服务端需求单 §11。更正：dockview 本就在 BoardDock 异步 chunk（85KB 不进任何路由首载），此前"登录页白下 dockview"系构建产物 grep 误匹配，已澄清。
+> 2026-09-12（首载节流：面板懒加载 + 静态缓存头）：`panel-registry` 五个窗口改 `next/dynamic` 异步 chunk（出厂布局首窗挂载时按序加载，骨架屏无感），lightweight-charts（104KB gz）退出 /board 首载——构建实测 board 首载 **297→203KB gz**；login/teaching 186~187KB 不变。`next.config.ts` 新增 `/teaching-content` 长缓存头（**7 天新鲜 + 30 天 stale-while-revalidate**，2026-09-12 从 1h 延长——内容基本不动，紧急修订需改文件名或等过期）与 `poweredByHeader:false`。部署侧剩余项（反代 gzip/br、HTTP/2/3、CDN、多 scope 聚合端点）录服务端需求单 §11。更正：dockview 本就在 BoardDock 异步 chunk（85KB 不进任何路由首载），此前"登录页白下 dockview"系构建产物 grep 误匹配，已澄清。
 > 2026-09-12（GC 期权层空白修复）：用户实测 06 面板「期权OI分布·前日EOD / 期权成交量分布·0DTE / 期权水位·0DTE」**黄金全空白但 K 线正常**。定位：非前端逻辑错（真实 payload 回放编译件，三层对 GC 全部应渲染），是三个层共用重车道而 K 线走快车道——GC 响应在 1~3KB/s 无压缩链路上传不完 55s 上游预算（GC close 772KB / 旧 intraday 170KB / VP 2h 208KB），系统性 502。前端治标：BFF intraday 裁剪 `levels[]`（全仓确认无消费方，GC 170KB→约 2KB）+ `mergeDashboardCurrent` 改新鲜度优先（修 dashboard 旧快照回盖新 current 的水位回跳）。OI 分布·close 仍受 GC close 裸传制约，根治靠服务端 S1（实测证据录服务端需求单 §9）；另记录 GC close 不传 underlying 时 argMax 选到 GCZ7 远月、GC status 多合约月份 entries 两个后端口径问题。
 > 2026-09-11（06 美东时间轴 + 默认 EOD 总控）：06 面板 X 轴/读数/十字光标一律美东时间（America/New_York，后缀 ET；10 IvTermPanel 到期标签仍 CT 不动）；06 默认视野 = 当前交易日开盘到收盘整段（`fitSession`，历史回看窗仍整窗 fitContent）；K线 reset 重灌后按时间域锚定恢复视野，不再 fitContent 跳视野。**总控出厂默认周期改为 `close`（EOD）单选**（`board-window-store.ts`：master/perProductScope 默认 + 旧 0dte 出厂档 hydrate 一次性迁移，localStorage 标记 `marsoon-scope-default-v2`，用户自主保存过的周期不动）。
 
@@ -56,7 +56,7 @@ CME 期货期权看板（ES/NQ/GC）。**数据源唯一：Go 期权服务**（`
 看板全局五档：`收盘 | 0DTE | 30DTE | 90D | RTH`（`OptionScope = "close" | "0dte" | "d30" | "d90" | "all"`，定义于 `src/api/options.ts`；`all` 显示名 RTH，key 不动）。
 
 - `close`：Databento EOD 数据，BFF 已放行 unified 直连 Go（2026-09-11；原五路由无条件空态短路已改仅 legacy 生效）——是否有数据由 Go 裁决，无数据仍走空态（各面板 `ClosePendingState`，红线：缺数据显示空态，不降级为 0、不造数）。
-- `0dte`：当前为免费源 15min 样本，Databento 接入后升 1min。
+- `0dte`：当日到期（Databento 1min 口径）。
 - `d30`：DTE ≤ 30 聚合（含 0DTE）。
 - `d90`：DTE ≤ 90 聚合（含 0DTE），已替代旧 `nearest`。
 - `all`：全期限（盘中口径，显示名 RTH）。
@@ -64,7 +64,7 @@ CME 期货期权看板（ES/NQ/GC）。**数据源唯一：Go 期权服务**（`
 > 2026-09-03 起：全局总控（/board 顶栏 收盘/0DTE/30DTE/90D/RTH）为**多选**（至少 1 个，固定优先级 `0dte > d30 > d90 > all > close`，[0] 为主周期）；表格类/单值消费取主周期，line 窗（06/07/10）联动开时跟随总控、联动关时窗内自治（上限 3）。详见 `docs/frontend/周期架构迭代开发文档.md` 第十/十一节。
 > 2026-09-04 起（09 第七轮/看板级第三十一轮）：🔗解耦 chip 统一捆绑品种+周期两维度——联动=跟随总控（table 类 chips 置灰），解耦=冻结当时周期快照窗内自治；📌 scopePinned 语义废除。09 窗口不再有周期 chips，恒跟总控（解耦=冻结）。
 > ⚠️ **给后续 AI 助手（GPT）的强制备注**：09 期权链的周期当前为联动跟随总控，但其**周期框架因免费源数据限制未与大框架统一**——09 按单到期链（chain API）逐档下钻，**非** d30/d90 聚合口径。**未来接入 Databento 数据后必须统一改造**（09 周期框架对齐大框架聚合口径），完成时同步删除本条备注及面板表内同名备注。
-> 2026-09-04（看板级第三十二轮）：导航收敛为两项——拼装看板 /board + 教学看板 /teaching（整页 iframe 加载 `public/teaching.html`，换内容只覆盖该文件）；旧仪表盘页路由保留仅移出导航。01 总览接 useMeasureSize：价位轴 svg 实测整数宽（废除写死 viewBox 860 的缩放发虚），窄窗（<520px）文字降档（MetricCard 新增可选 `compact`，旧页面不传不受影响）。
+> 2026-09-04（看板级第三十二轮）：导航收敛为两项——拼装看板 /board + 教学看板 /teaching（React 导航壳 + 整页 iframe 加载 `public/teaching-content/` 自包含课件，`?lesson=05`～`10` 切换）；旧仪表盘页路由保留仅移出导航。01 总览接 useMeasureSize：价位轴 svg 实测整数宽（废除写死 viewBox 860 的缩放发虚），窄窗（<520px）文字降档（MetricCard 新增可选 `compact`，旧页面不传不受影响）。
 > 2026-09-04（看板级第三十三轮）：看板布局多模板系统——本地模板库存于 `marsoon-board-templates-v1`（含默认模板），「模板」浮层在「+ 数据面板」旁（保存/应用/设默认/删除/复制分享链接）；分享入口为 URL `?layout=`（deflate+base64url，前缀 `v1.`，无 CompressionStream 回退 `v0.` 未压缩）。启动恢复优先级：分享链接 payload → 默认模板 → 自动存档 → 出厂布局，应用后照常落自动存档。
 > 2026-09-04（05 第一轮/看板级第三十四轮）：05 到期热力图产品化——列级 CW/PW/FLIP 标记、TERM Σ 跟随 mode、截断"+N"提示、hover 读数卡+交叉高亮、点行/列头下钻联动（新 `board-focus-store.ts` 瞬态 store：05 产 → 09 切到期 tab / 08 高亮最近档，TTL 30s）、窄窗四档 LOD（full/mid/compact/barsOnly）、色阶全局归一化+图例条；详见 `docs/panels/05面板迭代开发文档.md`。
 > 2026-09-04（看板级第三十六轮）：侧栏全站统一——废除 /board 特判与 NavDrawer 抽屉（组件已删），`Sidebar.tsx` 回归纯导航（宽度过渡 + 左滑动画），收起开关唯一化 `SidebarToggleButton`（图标随状态切换），只住页面功能栏（/board 顶栏 leading 位、/teaching 新增同款 h-16 功能栏：开关 + 标题，iframe 让位功能栏）；收起态存 `marsoon-sidebar-collapsed` 全站共享，仅 /board+/teaching 生效（`TOGGLE_PATHS` 白名单，其余页面恒展开避免死状态）。
@@ -106,8 +106,6 @@ CME 期货期权看板（ES/NQ/GC）。**数据源唯一：Go 期权服务**（`
 | `docs/process/ITERATION.md` | ✅ 已完成（2026-09-10 重写为 Go 时代迭代计划） | 待办以它和 `docs/backend/服务端优化与更新策略.md` 为准 |
 | `docs/backend/供应商数据需求.md` | 📋 **付费源接入时的权威清单** | P0-2/P0-3/P2-1 等字段需求 |
 | `docs/architecture/技术架构.md` / `docs/backend/后端规划.md` | 📋 参考 | |
-
-## 迭代惯例
 
 ## 面板自适应规范（2026-09-03 起，06 第十九轮首创、本轮推广至 01/05/07/10）
 
