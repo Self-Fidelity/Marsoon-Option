@@ -281,6 +281,10 @@ export async function intraday(request: Request, signal?: AbortSignal) {
     if (dash && dash.has_data !== false && number(dash.snapshot_unix)) data = { ...data, current: currentFromDashboard(dash) };
   }
   if (optionsOnly && data.bars?.length) data = { ...data, bars: [] };
+  // levels[] 轨迹裁剪（2026-09-12）：全仓 grep 确认 intraday 的 levels 无任何消费方
+  // （唯一 levels 消费方是 /options/levels 端点的旧仪表盘页）；GC 实测 1164 条约 150KB、
+  // 占响应近九成，体积直接放大 55s 上游超时打爆的概率（水位线只依赖 current）。
+  data = { ...data, levels: [] };
   if ((data.bars?.length ?? 0) > 0) data = { ...data, has_data: true, missing_reason: undefined };
   if (underlying && (data.underlying_symbol == null || data.candle_underlying_symbol == null)) {
     data = { ...data, underlying_symbol: data.underlying_symbol ?? underlying, candle_underlying_symbol: data.candle_underlying_symbol ?? underlying };

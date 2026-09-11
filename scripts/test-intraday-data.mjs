@@ -31,6 +31,22 @@ test('independent candles paint first and survive the later option payload',()=>
   assert.equal(merged.candle_notice,'最近交易日');
 });
 
+test('fresher intraday current wins over an older dashboard snapshot (2026-09-12 GC 水位回盖修复)',()=>{
+  const staleDash={...dashboard,snapshot_unix:100,summary:{...dashboard.summary,call_wall:110,put_wall:90,gamma_flip:101}};
+  const freshIntra={...intraday,current:{captured_at:200,spot:102,call_wall:111,put_wall:88,gamma_flip:103,atm_iv:.21,expected_move:19}};
+  const merged=mergeDashboardCurrent(freshIntra,staleDash);
+  assert.deepEqual(merged.current,{captured_at:200,spot:102,call_wall:111,put_wall:88,gamma_flip:103,atm_iv:.21,expected_move:19});
+});
+
+test('older dashboard fills missing fields but never overrides fresher intraday values',()=>{
+  const staleDash={...dashboard,snapshot_unix:100,summary:{...dashboard.summary,call_wall:110,put_wall:null,gamma_flip:101}};
+  const freshIntra={...intraday,current:{captured_at:200,spot:102,call_wall:111,put_wall:88,gamma_flip:null,atm_iv:null,expected_move:null}};
+  const merged=mergeDashboardCurrent(freshIntra,staleDash);
+  assert.equal(merged.current.call_wall,111);
+  assert.equal(merged.current.put_wall,88);
+  assert.equal(merged.current.gamma_flip,101);
+});
+
 test('a degraded candle payload must never wipe existing history (union, 2026-09-10)',()=>{
   const history=[{unix:60,open:100,high:101,low:99,close:100,volume:5},{unix:120,open:100,high:102,low:99,close:101,volume:6},{unix:180,open:101,high:103,low:100,close:102,volume:8}];
   const degraded={...intraday,has_data:true,bars:[{unix:240,open:102,high:104,low:101,close:103,volume:3}],candle_underlying_symbol:'NQU6'};

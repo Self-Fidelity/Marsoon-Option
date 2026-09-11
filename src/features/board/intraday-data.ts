@@ -56,26 +56,39 @@ export function mergeDashboardCurrent(
   const dataUnderlying = candleUnderlying(data);
   const dashboardUnderlying = (market?.underlying_symbol ?? dashboard.underlying_symbol)?.toUpperCase();
   if (dataUnderlying && dashboardUnderlying && dataUnderlying !== dashboardUnderlying) return data;
-  const spot = data.current?.spot ?? market?.underlying_price ?? summary?.underlying_price ?? null;
-  const expectedMove = data.current?.expected_move ?? (
+  // 新鲜度优先（2026-09-12）：dashboard 快照与 intraday current 谁新用谁，旧值只补缺。
+  // 原实现无条件 summary/market 优先，实测 GC 13:25 的 dashboard 墙位回盖 14:20 的 intraday current，
+  // 水位线整体跳回一小时前的旧墙。
+  const dashTime = numberOrZero(dashboard.snapshot_unix);
+  const intraTime = numberOrZero(data.current?.captured_at);
+  const dashFresh = dashTime > intraTime;
+  const pickFresh = <T>(dashValue: T | null | undefined, intraValue: T | null | undefined): T | null => {
+    const dashOk = dashValue != null && Number.isFinite(dashValue as number) ? dashValue : undefined;
+    const intraOk = intraValue != null && Number.isFinite(intraValue as number) ? intraValue : undefined;
+    return (dashFresh ? dashOk ?? intraOk : intraOk ?? dashOk) ?? null;
+  };
+  const spot = pickFresh(market?.underlying_price ?? summary?.underlying_price, data.current?.spot);
+  const dashExpectedMove =
     typeof summary?.expected_move_upper === "number" && typeof summary.expected_move_lower === "number"
       ? Math.abs(summary.expected_move_upper - summary.expected_move_lower) / 2
       : typeof spot === "number" && typeof summary?.expected_move_upper === "number"
         ? Math.abs(summary.expected_move_upper - spot)
         : typeof spot === "number" && typeof summary?.expected_move_lower === "number"
           ? Math.abs(spot - summary.expected_move_lower)
-          : null
-  );
+          : null;
   return {
     ...data,
     current: {
-      captured_at: data.current?.captured_at ?? dashboard?.snapshot_unix ?? 0,
+      captured_at: Math.max(dashTime, intraTime) || (dashboard?.snapshot_unix ?? 0),
       spot,
-      call_wall: summary?.call_wall ?? market?.call_wall ?? data.current?.call_wall ?? null,
-      put_wall: summary?.put_wall ?? market?.put_wall ?? data.current?.put_wall ?? null,
-      gamma_flip: summary?.gamma_flip ?? market?.gamma_flip ?? data.current?.gamma_flip ?? null,
-      atm_iv: summary?.atm_iv ?? data.current?.atm_iv ?? null,
-      expected_move: expectedMove,
+      call_wall: pickFresh(summary?.call_wall ?? market?.call_wall, data.current?.call_wall),
+      put_wall: pickFresh(summary?.put_wall ?? market?.put_wall, data.current?.put_wall),
+      gamma_flip: pickFresh(summary?.gamma_flip ?? market?.gamma_flip, data.current?.gamma_flip),
+      atm_iv: pickFresh(summary?.atm_iv, data.current?.atm_iv),
+      expected_move: pickFresh(dashExpectedMove, data.current?.expected_move),
     },
   };
+}
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
